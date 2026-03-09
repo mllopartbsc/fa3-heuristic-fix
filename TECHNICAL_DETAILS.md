@@ -7,43 +7,76 @@ This document explains the technical mechanisms behind the proposed FlashAttenti
 On an NVIDIA H100 (Hopper), there are **132 Streaming Multiprocessors (SMs)**. To achieve peak throughput, a kernel must ideally occupy all SMs simultaneously.
 
 ### The SM Starvation Problem
-In **Multi-Query Attention (MQA)** or **Grouped-Query Attention (GQA)** regimes with short context, the number of parallel work units (tiles) can be as low as 8 ($Batch \times H_{KV}$). Without sequence splitting, the baseline heuristic launches only one Thread Block (CTA) per tile.
+In **Multi-Query Attention (MQA)** or **Grouped-Query Attention (GQA)** regimes with short context, the number of parallel work units (tiles) can be as low as 8 ($Batch \times H_{KV}$). Without sequence splitting, the baseline heuristic launches only one Thread Block (CTA) per tile, leaving most of the GPU idle.
 
 ```mermaid
-graph TD
-    subgraph "GPU Hardware (H100 - 132 SMs)"
-        SM1[SM 0]
-        SM2[SM 1]
-        SM3[SM 2]
-        SM4[SM 3]
-        SM5[SM 4]
-        SM6[SM 5]
-        SM7[SM 6]
-        SM8[SM 7]
-        SM_EMPTY[...]
-        SM132[SM 131]
+graph LR
+    subgraph CTAs ["Workload (8 CTAs)"]
+        direction TB
+        C0(CTA 0)
+        C1(CTA 1)
+        C2(CTA 2)
+        C3(CTA 3)
+        C4(CTA 4)
+        C5(CTA 5)
+        C6(CTA 6)
+        C7(CTA 7)
     end
 
-    subgraph "Baseline Execution (8 CTAs)"
-        CTA1(CTA 0) --> SM1
-        CTA2(CTA 1) --> SM2
-        CTA3(CTA 2) --> SM3
-        CTA4(CTA 3) --> SM4
-        CTA5(CTA 4) --> SM5
-        CTA6(CTA 5) --> SM6
-        CTA7(CTA 6) --> SM7
-        CTA8(CTA 7) --> SM8
+    subgraph SMs ["H100 GPU (132 SMs)"]
+        direction TB
+        S0[SM 0]
+        S1[SM 1]
+        S2[SM 2]
+        S3[SM 3]
+        S4[SM 4]
+        S5[SM 5]
+        S6[SM 6]
+        S7[SM 7]
+        S_IDLE[... 124 Idle SMs ...]
     end
 
-    style SM_EMPTY fill:#fdd,stroke:#f66,stroke-dasharray: 5 5
-    style SM132 fill:#fdd,stroke:#f66,stroke-dasharray: 5 5
+    C0 --> S0
+    C1 --> S1
+    C2 --> S2
+    C3 --> S3
+    C4 --> S4
+    C5 --> S5
+    C6 --> S6
+    C7 --> S7
+
+    style S_IDLE fill:#f99,stroke:#f66,stroke-dasharray: 5 5
 ```
 > [!IMPORTANT]
 > In the diagram above, **~94% of the GPU (124/132 SMs)** remains completely idle during the kernel execution, leading to the "starvation" bottleneck.
 
 ---
 
-## 2. The Solution: Tile-Aware Heuristic Fix
+## 2. The Flaw: The Premature Guard
+
+The root cause of this underutilization was a **premature return guard** in the FlashAttention-3 heuristic logic.
+
+### Original C++ Code (`heuristics.h`)
+The original implementation contained the following check early in the `num_splits_heuristic` function:
+
+```cpp
+// --- ORIGINAL CODE ---
+if (num_n_blocks <= 4) {
+    return 1;
+}
+```
+
+### Why It was Flawed
+This guard was originally intended as a "fast path" to avoid the overhead of sequence splitting for short sequences (where $L \le 512$). However, it suffered from two critical architectural oversights:
+
+1.  **Ignored Head Count ($H_{KV}$)**: It only looked at the sequence length (`num_n_blocks`), completely ignoring how many KV heads were active. In Multi-Head Attention (MHA) with 64+ heads, launching 1 CTA per head is enough to fill the GPU. But in MQA ($H_{KV}=1$), it only launches **one CTA per batch item**, which is insufficient.
+2.  **Ignored SM Scale**: It did not account for the massive SM count of the H100 (132 SMs). A shortcut that was "safe" on older, smaller GPUs became a major bottleneck on modern Hopper silicon.
+
+By returning `1` split unconditionally, it prevented the sophisticated efficiency optimizer (the "efficiency loop") from ever seeing these low-tile cases.
+
+---
+
+## 3. The Solution: Tile-Aware Heuristic Fix
 
 The solution is to force **Sequence Splitting** when the number of tiles is low, even for relatively short sequences ($L \approx 512$). This divides the KV-cache sequence among multiple SMs, increasing the total CTA count to fill the GPU.
 
