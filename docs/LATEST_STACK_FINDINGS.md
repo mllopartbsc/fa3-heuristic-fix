@@ -29,7 +29,7 @@ The benchmarks demonstrate that **yes**, the tuned split policy yields a large w
 
 The tuned latest-stack policy (implemented in this reproduction package) is:
 
-- **Keep the same safety guards as the original paper:**
+- **Keep the same safety guards as the baseline heuristic:**
   - Guard 1: `nblk <= 3 -> 1 split`
   - Guard 2: `nblk <= 4 and tiles >= 4 -> 1 split`
 - **In the low-tile `nblk=4` win regime:**
@@ -39,7 +39,7 @@ The tuned latest-stack policy (implemented in this reproduction package) is:
 
 ## Scope
 
-These findings apply to modern H100 software stacks. They do not contradict the original paper results; rather, they show that the optimal integer configuration has shifted slightly (`3` instead of `4` splits) while the underlying mechanism—improving latent occupancy in the low-tile decode regime—remains identical and highly effective.
+These findings apply to modern H100 software stacks. They do not contradict baseline benchmarks; rather, they show that the optimal integer configuration has shifted slightly (`3` instead of `4` splits) while the underlying mechanism—improving latent occupancy in the low-tile decode regime—remains identical and highly effective.
 
 ## Industry Impact & Relevance
 

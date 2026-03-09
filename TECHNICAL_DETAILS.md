@@ -116,11 +116,11 @@ def tile_aware_num_splits(nblk, tiles, num_sms):
 
 ---
 
-## 3. Why It Works
+## 4. Why It Works
 
 By bypassing the `nblk <= 4` shortcut for low-tile MQA, the kernel now calculates that 3 or 4 splits are optimal. For $H_{KV}=1$, this increases the CTA count from **8** to **32**, significantly improving SM coverage and memory controller pressure, resulting in the measured **~20% kernel-level speedup**.
 
-## 4. Performance Impact
+## 5. Performance Impact
 
 | Config | Regime | Baseline Splitting | Fixed Splitting | Speedup |
 | :--- | :--- | :--- | :--- | :--- |
@@ -130,7 +130,7 @@ By bypassing the `nblk <= 4` shortcut for low-tile MQA, the kernel now calculate
 
 ---
 
-## 5. Reproduction Methodology: Why a Python Reference?
+## 6. Reproduction Methodology: Why a Python Reference?
 
 A common question is why the package includes a Python implementation (`src/heuristics_reference.py`) if the final goal is a C++ patch.
 
@@ -142,7 +142,7 @@ The reference implementation serves three critical roles in this reproduction pa
 
 ---
 
-## 6. Heuristic vs. Kernel: Why We Still Compile
+## 7. Heuristic vs. Kernel: Why We Still Compile
 
 A common point of confusion is why compilation is required if a Python reference exists:
 

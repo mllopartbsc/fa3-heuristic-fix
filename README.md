@@ -16,7 +16,7 @@ By replacing the naive block with a mathematically rigorous, tile-aware heuristi
 
 ## 🚀 Quick Start: Automated Reproduction
 
-We provide a single, fully-automated entry point script that clones FlashAttention-3, applies the patch, builds both baseline and patched versions, runs all benchmarking experiments, generates LaTeX tables, and validates the results against the expected claims.
+We provide a single, fully-automated entry point script that clones FlashAttention-3, applies the patch, builds both baseline and patched versions, runs all benchmarking experiments, generates summary LaTeX tables, and validates the results against the expected claims.
 
 ### Option 1: Native Environment (Requires CUDA & PyTorch)
 
@@ -126,7 +126,7 @@ python3 experiments/exp1_correctness.py
 
 ### 3. Verify Results
 
-Experimental results are saved as `.json` files in the `results/` directory. You can automatically validate the generated JSON files against the expected tolerances defined in the publication:
+Experimental results are saved as `.json` files in the `results/` directory. You can automatically validate the generated JSON files against the expected claims:
 
 ```bash
 python3 src/validate_claims.py

@@ -12,9 +12,9 @@ This PR introduces a **kernel-scoped improvement** for low-tile FA3 decode on th
 
 1. **Safety First:** Zero regressions across a 160-configuration tested matrix.
 2. **Targeted Win:** Improves service latency in the specific low-tile decode regime (L_K = 448-512, H_KV = 1 or 2).
-3. **End-to-End Context:** While the kernel-level speedup is significant (up to 1.2x), actual end-to-end vLLM experiments have not been performed yet. The end-to-end serving gains presented here are strictly theoretical estimates bound by Amdahl's Law. Real-world end-to-end experiments with vLLM are planned for future work.
+3. **End-to-End Context:** While the kernel-level speedup is significant (up to 1.2x), actual end-to-end vLLM performance experiments have not been performed yet. The end-to-end serving gains presented here are strictly theoretical estimates bound by Amdahl's Law. Real-world performance benchmarking with vLLM is planned for future work.
 
-This PR strictly focuses on the kernel-level optimization and does **not** claim measured generic end-to-end serving throughput gains across arbitrary workloads.
+This PR strictly focuses on the kernel-level optimization and does **not** claim measured end-to-end serving throughput gains across arbitrary workloads. Functional validation in vLLM (confirming the kernel path is correctly hit) has been successfully verified.
 
 ---
 
@@ -23,7 +23,7 @@ This PR strictly focuses on the kernel-level optimization and does **not** claim
 1. **Kernel Win:** In the target low-tile decode kernel regime (e.g., L_K=512, H_KV=1), the tuned split policy produces a real kernel win on the modern stack.
 2. **Updated Tuning:** The modern-stack optimum for the low-tile `nblk=4` case is `3` splits rather than `4` (which was optimal on older stacks).
 3. **Integration Proof:** Worker-side vLLM runs show that the FA3 varlen decode path is reached, traced with concrete shape metadata, and successfully imports the patched backend.
-4. **End-to-End Reality:** Actual end-to-end vLLM benchmarking has not been performed. Theoretical estimates suggest small serving gains consistent with Amdahl limits. Executing true end-to-end experiments is a subject for future verification.
+4. **End-to-End Reality:** Actual end-to-end vLLM performance benchmarking has not been performed. Theoretical estimates suggest small serving gains consistent with Amdahl limits. Executing true end-to-end performance experiments is a subject for future verification.
 
 ---
 
@@ -43,7 +43,7 @@ A comprehensive 160-configuration matrix sweep (`experiments/exp3_safety_verific
 - **3 Wins** (speedups > 1.03x in target regimes)
 - **157 Neutral / Unchanged** setups
 
-4. **End-to-End Interpretation**
+### 3. End-to-End Interpretation
 
 Using the measured kernel delta:
 - ~2.33 µs saved per layer in the best case (H_KV=1, L_K=512).
