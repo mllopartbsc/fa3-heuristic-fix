@@ -57,17 +57,17 @@ def main():
 
     # 3. Validate Claims
     if not args.experiment:
-        print("\n[Phase 3/4] Validating Results against Paper Claims")
+        print("\n[Phase 3/4] Validating Results against Expected Claims")
         run_cmd(["python3", "src/validate_claims.py"])
     else:
         print("\n[Phase 3/4] Validating Results: SKIPPED (single experiment mode)")
 
     # 4. Generate Tables (if full run)
     if not args.experiment:
-        print("\n[Phase 4/4] Generating LaTeX Tables")
+        print("\n[Phase 4/4] Generating Summary Tables")
         run_cmd(["python3", "scripts/generate_tables.py"], check=False)
     else:
-        print("\n[Phase 4/4] LaTeX Tables: SKIPPED (single experiment mode)")
+        print("\n[Phase 4/4] Summary Tables: SKIPPED (single experiment mode)")
 
     print("\n══════════════════════════════════════════════════════════════════")
     print("  Reproduction Workflow Complete!                                 ")

@@ -2,7 +2,6 @@
 """
 Experiment 1: Strict Correctness & Determinism
 ═══════════════════════════════════════════════
-Paper reference: Section 4.1
 
 Verifies that the tile-aware fix (Policy C) produces numerically equivalent
 outputs to a double-precision (FP64) reference implementation of scaled
@@ -168,7 +167,6 @@ def run(args):
     os.makedirs("results", exist_ok=True)
     output = {
         "experiment": "exp1_correctness",
-        "paper_reference": "Section 4.1, Experiment 1",
         "device": torch.cuda.get_device_name(0),
         "sm_count": sm_count,
         "total_trials": args.trials,

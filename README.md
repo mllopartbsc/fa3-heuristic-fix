@@ -16,7 +16,7 @@ By replacing the naive block with a mathematically rigorous, tile-aware heuristi
 
 ## 🚀 Quick Start: Automated Reproduction
 
-We provide a single, fully-automated entry point script that clones FlashAttention-3, applies the patch, builds both baseline and patched versions, runs all benchmarking experiments from the paper, generates LaTeX tables, and validates the results against the original claims.
+We provide a single, fully-automated entry point script that clones FlashAttention-3, applies the patch, builds both baseline and patched versions, runs all benchmarking experiments, generates LaTeX tables, and validates the results against the expected claims.
 
 ### Option 1: Native Environment (Requires CUDA & PyTorch)
 
@@ -69,7 +69,7 @@ The reproduction package is strictly curated to include only the essential files
 ├── configs/
 │   └── experiment_params.yaml          # Benchmarking parameter definitions
 ├── expected_results/
-│   └── paper_claims.json               # Tolerance limits for CI validation
+│   └── claims.json                     # Tolerance limits for CI validation
 ├── docs/
 │   ├── PR_EVIDENCE.md                  # Concise reviewer evidence packet
 │   └── LATEST_STACK_FINDINGS.md        # Software stack updates analysis
@@ -142,6 +142,4 @@ All performance measurements in this reproduction package adhere to strict metho
 *   **A/B Interleaving:** For any configuration where the policy alters work-split behavior, execution alternates back and forth between baseline and fix graphs to eliminate unobserved thermal/JIT bias.
 *   **Significance Windows:** 10,000 sampling iterations are gathered, returning medians, $P_{05}$, and $P_{95}$ bounds to guarantee statistical significance.
 
-## 📄 License & Contact
 
-This reproduction package is provided under the BSD 3-Clause License. See [`LICENSE`](LICENSE) for more details.

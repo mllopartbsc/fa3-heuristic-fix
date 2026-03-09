@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Main Results: Kernel-Level Latency (Table 5)
+Main Results: Kernel-Level Latency
 ════════════════════════════════════════════
-Paper reference: Table 5 (Main Results), Repeatability paragraph
 
 A/B interleaved kernel-level benchmarks with CUDA Graph capture.
 Reports median, P5, P95 for headline configurations.
@@ -135,7 +134,6 @@ def run(quick: bool = False):
     os.makedirs("results", exist_ok=True)
     output = {
         "experiment": "main_results",
-        "paper_reference": "Table 5",
         "device": device_name,
         "sm_count": sm_count,
         "protocol": "CUDA Graphs, A/B interleaved, precomputed scheduler metadata, 10K iters, 200 warmups",

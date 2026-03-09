@@ -2,7 +2,6 @@
 """
 Experiment 3: Safety Contract Verification (160-Configuration Sweep)
 ════════════════════════════════════════════════════════════════════
-Paper reference: Section 4.5, Tables 4 (Policy Matrix), 7 (Safety Contract)
 
 Sweeps 160 configurations: B ∈ {1,2,4,8} × H_KV ∈ {1,2,4,8,32} × L_K ∈ {128,...,8192}
 Verifies zero regressions for the tile-aware fix (Policy C).
@@ -153,7 +152,6 @@ def run(quick: bool = False):
     os.makedirs("results", exist_ok=True)
     output = {
         "experiment": "exp3_safety_verification",
-        "paper_reference": "Section 4.5, Tables 4, 7",
         "device": device_name,
         "sm_count": sm_count,
         "total_configs": len(configs),

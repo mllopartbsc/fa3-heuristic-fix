@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-U-Curve Sweep (Figure 2b)
+U-Curve Sweep
 ═════════════════════════
-Paper reference: Section 4.3, Figure 2b
 
 Sweeps split values manually in *eager* mode (no CUDA graphs).
 Eager mode includes python dispatch overhead (~30-55us), measuring the
@@ -65,7 +64,6 @@ def run(quick: bool = False):
     os.makedirs("results", exist_ok=True)
     output = {
         "experiment": "u_curve_sweep",
-        "paper_reference": "Figure 2b",
         "device": device_name,
         "config": {"B": B, "H_KV": H_KV, "L_K": L_K},
         "results": results,

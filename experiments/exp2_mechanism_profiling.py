@@ -2,7 +2,6 @@
 """
 Experiment 2: Mechanism Confirmation via Profiling
 ═══════════════════════════════════════════════════
-Paper reference: Section 4.2, Table 3, Figure 2a
 
 Measures SM throughput, active warps, and grid size under baseline (splits=1)
 vs forced splitting (splits=16) to confirm the grid-underfill hypothesis.
@@ -98,7 +97,6 @@ def run():
     os.makedirs("results", exist_ok=True)
     output = {
         "experiment": "exp2_mechanism_profiling",
-        "paper_reference": "Section 4.2, Table 3, Figure 2a",
         "device": device_name,
         "sm_count": sm_count,
         "results": results,

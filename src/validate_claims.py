@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Validate headline paper claims against expected tolerances.
+Validate headline claims against expected tolerances.
 
-Reads results/*.json plus expected_results/paper_claims.json and
+Reads results/*.json plus expected_results/claims.json and
 produces a claim-by-claim verdict. Called by reproduce.py after all
 experiments have completed.
 
 Usage:
   python3 src/validate_claims.py
-  python3 src/validate_claims.py --results-dir results/ --claims-file expected_results/paper_claims.json
+  python3 src/validate_claims.py --results-dir results/ --claims-file expected_results/claims.json
 """
 
 import argparse
@@ -81,7 +81,7 @@ def validate(results_dir: Path, claims_file: Path) -> tuple[list, list, list]:
                 else:
                     failed.append((claim_name,
                                    f"{spd:.3f}x NOT in [{lo:.2f}, {hi:.2f}] "
-                                   f"(paper: {spec['paper_value']})"))
+                                   f"(expected: {spec['expected_value']})"))
             else:
                 skipped.append((claim_name, "L_K=512, H_KV=1 entry not found in main_results"))
         else:
@@ -102,7 +102,7 @@ def validate(results_dir: Path, claims_file: Path) -> tuple[list, list, list]:
                 else:
                     failed.append((claim_name,
                                    f"{spd:.3f}x NOT in [{lo:.2f}, {hi:.2f}] "
-                                   f"(paper: {spec['paper_value']})"))
+                                   f"(expected: {spec['expected_value']})"))
             else:
                 skipped.append((claim_name, "L_K=512, H_KV=2 entry not found in main_results"))
         else:
@@ -220,10 +220,10 @@ def validate(results_dir: Path, claims_file: Path) -> tuple[list, list, list]:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Validate paper claims against experimental results.")
+    parser = argparse.ArgumentParser(description="Validate expected claims against experimental results.")
     parser.add_argument("--results-dir", default="results/", type=Path)
     parser.add_argument("--claims-file",
-                        default="expected_results/paper_claims.json", type=Path)
+                        default="expected_results/claims.json", type=Path)
     parser.add_argument("--json-out", default=None, type=Path,
                         help="Save validation report as JSON")
     args = parser.parse_args()

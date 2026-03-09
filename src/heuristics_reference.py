@@ -8,7 +8,7 @@ without running the actual kernel.
 Policies:
   - Policy A (baseline):    Upstream FA3 heuristic with premature guard
   - Policy B (forced):      Unconditional forced splitting (oracle ceiling)
-  - Policy C (tile-aware):  The proposed two-line fix (Algorithm 1 in paper)
+  - Policy C (tile-aware):  The proposed two-line fix
   - no_shortcut:            Baseline with the guard entirely removed
   - relaxed:                Guard relaxed to num_n_blocks <= 2
 """
@@ -75,7 +75,7 @@ def baseline_num_splits(
 
 
 # =============================================================================
-#  Policy C: Tile-Aware Fix (Algorithm 1 in paper)
+#  Policy C: Tile-Aware Fix
 # =============================================================================
 def tile_aware_num_splits(
     *,
@@ -92,7 +92,7 @@ def tile_aware_num_splits(
     min_tiles_for_shortcut: int = 4,
 ) -> int:
     """
-    The proposed two-line fix (Algorithm 1):
+    The proposed two-line fix:
       1. if (num_n_blocks <= 3) return 1;          // Guard 1
       2. if (num_n_blocks <= 4 && tiles >= 4) return 1;  // Guard 2
       3. Fall through to existing efficiency loop.
@@ -156,12 +156,12 @@ def latest_stack_tuned_num_splits(
     """
     Tuned variant for the latest software stack.
 
-    The safety logic remains the same as the paper policy:
+    The safety logic remains the same as the proposed policy:
       - Guard 1 keeps L_K <= 384 at 1 split.
       - Guard 2 keeps nblk=4 with enough tiles at 1 split.
 
     For the low-tile nblk=4 win regime, the latest stack benchmarks show that
-    3 splits outperforms the paper's original 4-way choice for H_KV in {1, 2}.
+    3 splits outperforms the original 4-way choice for H_KV in {1, 2}.
     """
     num_n_blocks = _ceil_div(lk, block_n)
     num_m_blocks = _ceil_div(lq, block_m)

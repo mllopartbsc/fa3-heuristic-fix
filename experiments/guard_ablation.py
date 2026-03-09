@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Guard Ablation Study (Table 8)
+Guard Ablation Study
 ══════════════════════════════
-Paper reference: Section 4.5, Table 8 (Guard Ablation)
 
 Analyzes the necessity of the proposed two-guard design by comparing the
 performance of four heuristic policies:
@@ -109,7 +108,6 @@ def run(quick: bool = False):
     os.makedirs("results", exist_ok=True)
     output = {
         "experiment": "guard_ablation",
-        "paper_reference": "Table 8",
         "device": device_name,
         "sm_count": sm_count,
         "results": results,

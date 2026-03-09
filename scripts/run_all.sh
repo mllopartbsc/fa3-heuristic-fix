@@ -2,8 +2,9 @@
 # ============================================================================
 # Run All Experiments: FlashAttention-3 Heuristic Fix Reproduction
 #
-# Runs all experiments from the paper sequentially and saves results to
-# the results/ directory as JSON files.
+# Runs all experiments and saves results to
+# the results/ directory.
+# as JSON files.
 #
 # Usage:
 #   bash scripts/run_all.sh                    # Run all experiments
@@ -109,7 +110,7 @@ run_experiment() {
     echo
 }
 
-# ── Paper Table/Figure mapping ───────────────────────────────────────────────
+# ── Experiment Execution ───────────────────────────────────────────────────
 # Experiment 1 (Section 4.1)  → exp1_correctness.json
 # Experiment 2 (Section 4.2)  → exp2_profiling.json
 # Table 5 (Main Results)      → main_results.json

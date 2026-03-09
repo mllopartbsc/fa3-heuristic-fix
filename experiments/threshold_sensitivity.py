@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Threshold Sensitivity Sweep (Appendix Table 10)
+Threshold Sensitivity Sweep
 ═══════════════════════════════════════════════
-Paper reference: Appendix A.1, Table 10
 
 Tests the robustness of the chosen parameter values in the tile-aware heuristic:
 - Guard 1 threshold: nblk <= 3 vs nblk <= 4
@@ -74,7 +73,7 @@ def run(quick: bool = False):
         {"name": "Proposed (G1=3, G2=4, S=3)", "g1": 3, "g2": 4, "s": 3},
         {"name": "Alt 1 (G1=3, G2=8, S=3)",    "g1": 3, "g2": 8, "s": 3},
         {"name": "Alt 2 (G1=4, G2=4, S=3)",    "g1": 4, "g2": 4, "s": 3},
-        {"name": "Paper Orig (G1=3, G2=4, S=4)", "g1": 3, "g2": 4, "s": 4},
+        {"name": "Orig Logic (G1=3, G2=4, S=4)", "g1": 3, "g2": 4, "s": 4},
     ]
 
     results = []
@@ -120,7 +119,6 @@ def run(quick: bool = False):
     os.makedirs("results", exist_ok=True)
     output = {
         "experiment": "threshold_sensitivity",
-        "paper_reference": "Appendix Table 10",
         "config": {"B": B, "H_KV": H_KV, "L_K": L_K},
         "device": device,
         "results": results,

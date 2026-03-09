@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-End-to-End Decode Step Simulation (Table 6)
+End-to-End Decode Step Simulation
 ═══════════════════════════════════════════
-Paper reference: Section 4.5, Table 6
 
 Simulates a complete decode forward pass using the Llama-3 70B MQA
 architecture (80 layers, 8-way TP).
@@ -100,8 +99,8 @@ def run(quick: bool = False):
         q=q, k_cache=k_cache, v_cache=v_cache, cache_seqlens=cs,
         rotary_cos=rcos, rotary_sin=rsin, k=k, v=v, num_splits=1,
     ) # Not actually running MLP, just stubbing for structural similarity.
-      # In the paper we used empirical vLLM timeline traces.
-      # Here we hardcode the empirical trace fraction for the reproduction script.
+      # These are structural estimates. Real end-to-end vLLM experiments 
+      # have not been performed and are left for future work.
 
     # Empirical vLLM stack step time for B=1 Llama 70B on 8xH100 is ~25-28ms
     # Using the structural estimate:
@@ -119,7 +118,6 @@ def run(quick: bool = False):
     os.makedirs("results", exist_ok=True)
     output = {
         "experiment": "e2e_decode_simulation",
-        "paper_reference": "Table 6",
         "device": device_name,
         "single_layer_delta_us": round(kernel_delta, 2),
         "total_delta_ms": round(total_delta_ms, 3),

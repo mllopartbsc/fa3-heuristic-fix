@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-MQA Crossover Boundary Sweep (Table 9)
+MQA Crossover Boundary Sweep
 ══════════════════════════════════════
-Paper reference: Section 4.5, Table 9
 
 Sweeps L_K values focusing on MQA (H_KV=1) to confirm that 384 remains neutral
 (Guard 1 trigger), 512 is a win (Guard 2 bypass), and 640/768 are neutral (baseline already splits).
@@ -102,7 +101,6 @@ def run(quick: bool = False):
     os.makedirs("results", exist_ok=True)
     output = {
         "experiment": "boundary_sweep",
-        "paper_reference": "Table 9",
         "device": device_name,
         "results": results,
     }

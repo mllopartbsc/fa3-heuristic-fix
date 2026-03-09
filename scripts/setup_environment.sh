@@ -72,7 +72,7 @@ echo
 
 # ── Clone FlashAttention-3 ───────────────────────────────────────────────
 FA3_DIR="$REPO_ROOT/flash-attention"
-FA3_COMMIT="fbf24f67"  # Baseline version from the paper
+FA3_COMMIT="fbf24f67"  # Baseline version
 
 echo "[2/5] Setting up FlashAttention-3..."
 
@@ -85,7 +85,7 @@ fi
 
 cd "$FA3_DIR"
 
-# Checkout the exact commit used in the paper
+# Checkout the exact commit
 # echo "  Checking out baseline commit $FA3_COMMIT..."
 # git fetch origin
 # git checkout "$FA3_COMMIT" 2>/dev/null || {

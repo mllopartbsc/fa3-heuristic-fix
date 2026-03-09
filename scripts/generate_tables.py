@@ -3,7 +3,7 @@
 Generate LaTeX Tables from JSON Results
 ═══════════════════════════════════════
 Reads the output JSON files in results/ and generates a single
-LaTeX file containing Tables 3, 5, 6, 8, 9 from the paper.
+LaTeX file containing the benchmark results.
 
 Usage:
   python3 scripts/generate_tables.py --results-dir results/ --output-tex results/tables.tex
@@ -48,8 +48,7 @@ def main():
             f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
 
     # This is a simplified stub. In a full reproducible workflow, this script
-    # formats all the resulting JSON files into the exact LaTeX tables used in
-    # the conference submission.
+    # formats all the resulting JSON files into the exact LaTeX tables.
     print(f"Tables written to {args.output_tex} (simplified output)")
 
 if __name__ == "__main__":
