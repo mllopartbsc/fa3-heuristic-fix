@@ -1,0 +1,20 @@
+# Common benchmarking parameters (defaults used across reproduction package)
+benchmark:
+  warmups: 200
+  total_iters: 10000
+  sample_iters: 50
+  causal: true
+  dtype: bfloat16
+
+ab_interleaved:
+  rounds: 20
+  iters_per_round: 500
+
+eager:
+  warmups: 100
+  iterations: 1000
+
+correctness:
+  trials: 1000
+  max_rel_error_threshold: 1.0e-3
+  max_abs_error_threshold: 1.0e-3

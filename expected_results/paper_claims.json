@@ -1,0 +1,47 @@
+{
+  "headline_claims": {
+    "mqa_512_speedup": {
+      "paper_value": "1.12x",
+      "min": 1.10,
+      "max": 1.30,
+      "description": "Speedup for H_KV=1, L_K=512 (Table 5)"
+    },
+    "gqa2_512_speedup": {
+      "paper_value": "1.15x",
+      "min": 1.13,
+      "max": 1.30,
+      "description": "Speedup for H_KV=2, L_K=512 (Table 5)"
+    },
+    "mqa_512_statistical_significance": {
+      "paper_value": "P95_fix < P5_base",
+      "description": "Non-overlapping confidence intervals (Table 5)"
+    },
+    "zero_regressions": {
+      "paper_value": 0,
+      "required_regressions": 0,
+      "description": "Zero regressions found in the 160-cfg sweep (Table 7)"
+    },
+    "correctness_verdict": {
+      "paper_value": "PASS",
+      "required_verdict": "PASS",
+      "description": "Max abs/rel error within FP64 precision limits (Experiment 1)"
+    },
+    "correctness_max_abs_error": {
+      "paper_value": "< 1e-3",
+      "max": 0.005,
+      "description": "Worst-case absolute difference vs upcasted reference"
+    },
+    "safe_regime_neutral_mqa_384": {
+      "paper_value": "1.00x",
+      "min_speedup": 0.98,
+      "max_speedup": 1.02,
+      "description": "No measurable change in latency when Guard 1 triggers"
+    },
+    "safe_regime_neutral_gqa8_512": {
+      "paper_value": "1.00x",
+      "min_speedup": 0.98,
+      "max_speedup": 1.02,
+      "description": "No measurable change in latency when Guard 2 triggers"
+    }
+  }
+}

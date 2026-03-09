@@ -1,0 +1,16 @@
+--- a/flash_attn/hopper/heuristics.h
++++ b/flash_attn/hopper/heuristics.h
+@@ -XX,7 +XX,10 @@
+     // ... (preceding code in num_splits_heuristic() unchanged) ...
+ 
+-    if (num_n_blocks <= 4) {
+-        return 1;
+-    }
++    // Guard 1: L_K <= 384 (nblk <= 3) — combine cost always too high
++    if (num_n_blocks <= 3) { return 1; }
++
++    // Guard 2: L_K = 448-512 (nblk = 4) with enough tiles — splitting not needed
++    // total_mblocks == batch_size * num_heads (already a function parameter)
++    if (num_n_blocks <= 4 && total_mblocks >= 4) { return 1; }
+ 
+     // Fall through: existing efficiency loop runs (unchanged)

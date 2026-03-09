@@ -1,0 +1,23 @@
+Bootstrap: docker
+From: nvcr.io/nvidia/pytorch:24.03-py3
+
+%environment
+    export MAX_JOBS=20
+    export FLASH_ATTENTION_DISABLE_SM80=TRUE
+    export FLASH_ATTENTION_FORCE_BUILD=TRUE
+    export PYTHONPATH=/workspace/repo/.pydeps:$PYTHONPATH
+
+%post
+    apt-get update && apt-get install -y git ninja-build
+    mkdir -p /workspace/repo
+
+%files
+    . /workspace/repo
+
+%runscript
+    cd /workspace/repo
+    # Setup if not already done
+    if [ ! -d ".pydeps/flash_attn_interface" ]; then
+        bash scripts/setup_environment.sh
+    fi
+    exec python3 reproduce.py --skip-setup "$@"

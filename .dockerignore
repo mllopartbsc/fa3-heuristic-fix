@@ -1,0 +1,25 @@
+# Build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+build/
+dist/
+
+# Results from previous runs (fresh run generates its own)
+results/
+
+# NCU reports (large binary files)
+ncu_reports/
+
+# Apptainer / Singularity
+*.def
+*.sif
+
+# Git
+.git/
+.gitignore
+
+# Editor
+.vscode/
+.cursor/
