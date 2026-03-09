@@ -2,28 +2,118 @@
 
 This document explains the technical mechanisms behind the proposed FlashAttention-3 patch, why it is necessary, and how it resolves hardware underutilization on NVIDIA Hopper GPUs.
 
-## 1. The Bottleneck: Attention in MQA/GQA Regimes
-Modern highly-efficient Large Language Models (e.g., Llama-3, Mistral) heavily utilize **Multi-Query Attention (MQA)** and **Grouped-Query Attention (GQA)** to reduce the KV cache size during autoregressive text generation (decoding).
-This severely bounds the total amount of "Keys" and "Values" stored per sequence length ($L_K$).
+## 1. The Bottleneck: Hardware Underutilization
 
-When generating text, the primary workload on the GPU per attention step is functionally a reduction over the sequence length multiplied by the number of KV heads ($H_{KV}$). 
+On an NVIDIA H100 (Hopper), there are **132 Streaming Multiprocessors (SMs)**. To achieve peak throughput, a kernel must ideally occupy all SMs simultaneously.
 
-## 2. What Was Wrong Before
-FlashAttention calculates its mapping to hardware blocks based on a static **heuristic**. The baseline FlashAttention-3 heuristic measures the attention shape and decides how many parallel Thread Blocks to launch on the GPU.
+### The SM Starvation Problem
+In **Multi-Query Attention (MQA)** or **Grouped-Query Attention (GQA)** regimes with short context, the number of parallel work units (tiles) can be as low as 8 ($Batch \times H_{KV}$). Without sequence splitting, the baseline heuristic launches only one Thread Block (CTA) per tile.
 
-In scenarios where the context length is short ($\le 512$) and $H_{KV}$ is extremely small (e.g., $H_{KV}=1$ or $2$), the total volume of work is fundamentally tiny from a hardware perspective. The baseline heuristic correctly identifies this as a "small" job and naively limits sequence splitting, dispatching as few as **8 thread blocks**.
+```mermaid
+graph TD
+    subgraph "GPU Hardware (H100 - 132 SMs)"
+        SM1[SM 0]
+        SM2[SM 1]
+        SM3[SM 2]
+        SM4[SM 3]
+        SM5[SM 4]
+        SM6[SM 5]
+        SM7[SM 6]
+        SM8[SM 7]
+        SM_EMPTY[...]
+        SM132[SM 131]
+    end
 
-However, the NVIDIA Hopper architecture (H100) contains **132 Streaming Multiprocessors (SMs)**. Launching only 8 thread blocks causes a catastrophic occupancy collapse, physically starving the remaining 124 SMs of work. The kernel runs sequentially slower because the massive computational parallelism of the GPU is entirely sidestepped.
+    subgraph "Baseline Execution (8 CTAs)"
+        CTA1(CTA 0) --> SM1
+        CTA2(CTA 1) --> SM2
+        CTA3(CTA 2) --> SM3
+        CTA4(CTA 3) --> SM4
+        CTA5(CTA 4) --> SM5
+        CTA6(CTA 5) --> SM6
+        CTA7(CTA 6) --> SM7
+        CTA8(CTA 7) --> SM8
+    end
 
-## 3. The Solution: A Tile-Aware Heuristic
-To solve this SM starvation, we must force the kernel to **Sequence Split** the workload. Sequence splitting divides the sequence length dimension into smaller chunks across multiple thread blocks and computes the final global softmax reduction using atomic operations.
+    style SM_EMPTY fill:#fdd,stroke:#f66,stroke-dasharray: 5 5
+    style SM132 fill:#fdd,stroke:#f66,stroke-dasharray: 5 5
+```
+> [!IMPORTANT]
+> In the diagram above, **~94% of the GPU (124/132 SMs)** remains completely idle during the kernel execution, leading to the "starvation" bottleneck.
 
-The proposed patch introduces a mathematically rigorous **tile-aware heuristic** that inspects the expected capacity of the GPU (`total_mblocks`). 
-- If `total_mblocks` (essentially $Batch \times H_{KV}$) is significantly smaller than the available number of SMs.
-- And the sequence length indicates a low-tile scenario (`nblk <= 4`).
-- It overrides the default behavior and **forces the number of splits to increase**!
+---
 
-By artificially forcing higher sequence splitting exclusively in this starvation regime, the total number of dispatched thread blocks multiplies. This successfully floods the full 132 SMs of the H100 with work.
+## 2. The Solution: Tile-Aware Heuristic Fix
 
-## 4. The Impact
-This fix yields a deterministically measured **20% to 24% speedup** on the core MQA/GQA decode kernels without introducing numerical regressions. It seamlessly translates hardware awareness into the kernel dispatcher, providing optimal utilization bounds for modern transformer architectures.
+The solution is to force **Sequence Splitting** when the number of tiles is low, even for relatively short sequences ($L \approx 512$). This divides the KV-cache sequence among multiple SMs, increasing the total CTA count to fill the GPU.
+
+### The Code Change (High-Level)
+
+The fix replaces a premature exit guard in the heuristic logic with a "tile-aware" check.
+
+#### C++ Logic (Proposed Change)
+```cpp
+// In Hopper heuristics.h
+// OLD: Prematurely return 1 split if sequence is short
+// if (num_n_blocks <= 4) return 1;
+
+// NEW: Only return 1 split if nblk is very short OR we have enough tiles
+if (num_n_blocks <= 3) return 1; 
+if (num_n_blocks <= 4 && total_mblocks >= 4) return 1;
+
+// Otherwise, fall through to efficiency optimizer...
+```
+
+#### Python Reference Implementation
+```python
+def tile_aware_num_splits(nblk, tiles, num_sms):
+    # Guard 1: Extremely short context (L <= 384)
+    if nblk <= 3:
+        return 1
+
+    # Guard 2: High-tile scenario (B*H_KV >= 4)
+    # Splitting overhead at nblk=4 isn't worth it if SMs are full
+    if nblk <= 4 and tiles >= 4:
+        return 1
+
+    # Win Regime: Force splitting to fill the 132 SMs
+    # (Existing FA3 efficiency loop calculates optimal s)
+    return efficiency_loop(nblk, tiles, num_sms)
+```
+
+---
+
+## 3. Why It Works
+
+By bypassing the `nblk <= 4` shortcut for low-tile MQA, the kernel now calculates that 3 or 4 splits are optimal. For $H_{KV}=1$, this increases the CTA count from **8** to **32**, significantly improving SM coverage and memory controller pressure, resulting in the measured **~20% kernel-level speedup**.
+
+## 4. Performance Impact
+
+| Config | Regime | Baseline Splitting | Fixed Splitting | Speedup |
+| :--- | :--- | :--- | :--- | :--- |
+| MQA ($H_{KV}=1$), $L=512$ | **Starvation** | 1 | 3 | **1.22x** |
+| GQA ($H_{KV}=2$), $L=512$ | **Starvation** | 1 | 3 | **1.16x** |
+| MHA ($H_{KV}=64$), $L=512$ | **Saturated** | 1 | 1 | **1.00x (Safe)** |
+
+---
+
+## 5. Reproduction Methodology: Why a Python Reference?
+
+A common question is why the package includes a Python implementation (`src/heuristics_reference.py`) if the final goal is a C++ patch.
+
+The reference implementation serves three critical roles in this reproduction package:
+
+1.  **A/B Simulation**: The FlashAttention-3 Python API allows passing an explicit `num_splits` value. By using the Python reference, we can calculate what the "Baseline" would have picked ($s=1$) and what the "Fix" picks ($s=3$) and measure them side-by-side using the **same compiled binary**. This ensures the measured speedup is due to the split decision itself, not compiler noise or binary differences.
+2.  **Rapid Ablations**: We can test dozens of alternative thresholds (e.g., `nblk <= 2` or `num_splits=4`) by simply changing a Python variable. This allows us to prove the "Safety Contract" (Experiment 3) and "Sensitivity" (threshold sweep) much faster than recompiling the C++ kernel for every guest variation.
+3.  **Unit Testing**: It allows the `reproduce.py` script to verify that the C++ patch (once applied) matches the intended algorithmic logic across 160+ shapes without needing a debugger.
+
+---
+
+## 6. Heuristic vs. Kernel: Why We Still Compile
+
+A common point of confusion is why compilation is required if a Python reference exists:
+
+*   **The Heuristic (Python)**: This is only the *decision maker*. It takes the attention shape (B, H, L) and outputs a single integer: `num_splits`. It does **not** perform any actual GPU computation.
+*   **The Kernel (C++)**: This is the *execution engine*. It is the highly-optimized CUDA/TMA code that actually reads the KV-cache from HBM, performs the dot-products on Tensor Cores, and writes the output.
+
+We must compile the FA3 kernels because **performance measurements require the real engine**. The Python reference simply tells the engine "Run in Mode X" or "Run in Mode Y". Without the compiled CUDA binary, there is no performance to measure, and we cannot verify that our C++ patch actually correctly integrates into the FlashAttention-3 source tree.
