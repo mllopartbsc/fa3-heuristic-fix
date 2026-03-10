@@ -1,6 +1,6 @@
 # FlashAttention-3 Tile-Aware Split Heuristic Fix
 
-This repository contains the reproduction package for the **Tile-Aware Split Heuristic Fix** for FlashAttention-3 on modern NVIDIA Hoppers (H100/H800).
+This repository contains the reproduction package for the **Tile-Aware Split Heuristic Fix** for FlashAttention-3 on modern NVIDIA Hoppers (H100).
 
 The proposed two-line patch optimally adapts the work-splitting heuristic in low-tile decode scenarios—specifically when `L_K` is between 448 and 512, and `H_KV` is 1 or 2 (e.g., Llama-3 70B MQA/GQA regimes). It yields up to a **1.2x kernel-level speedup** in this specific boundary while maintaining a strictly safe **0 regressions** profile across a 160-configuration tested matrix.
 
