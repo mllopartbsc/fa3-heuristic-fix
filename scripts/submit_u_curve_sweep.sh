@@ -3,7 +3,7 @@
 # U-Curve Sweep Job — Kernel-level split sweep (1–64) + optional figure regeneration
 #
 # Runs the u_curve_sweep experiment with kernel-level timing and precomputed
-# scheduler metadata (same as main_results). Optionally regenerates the paper
+# scheduler metadata (same as main_results). Optionally regenerates the U-curve
 # figure if PREPRINT_DIR is set and points to pre_prints/fa3_patch.
 #
 # Prerequisites: Run prepare_flash_attention.sh once on login node.
@@ -13,7 +13,7 @@
 #   2. export CONTAINER_IMG=/path/to/your/container.sif
 #   3. From repo root: cd /path/to/fa3-heuristic-fix && sbatch scripts/submit_u_curve_sweep.sh
 #
-# Optional figure regeneration (when paper layout exists):
+# Optional figure regeneration (when pre_prints layout exists):
 #   export PREPRINT_DIR=/path/to/repo/pre_prints/fa3_patch
 #
 # Results:

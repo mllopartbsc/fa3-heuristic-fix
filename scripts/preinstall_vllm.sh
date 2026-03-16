@@ -27,27 +27,19 @@ if [[ ! -x "$CNT_BIN" ]]; then
   exit 1
 fi
 
-# Work around missing session dir on login node (cluster may use /scratch/tmp/singularity)
+# Use a writable temp dir for Singularity. On some clusters you may need to set
+# SINGULARITY_TMPDIR to a location with sufficient space (e.g. project scratch).
 export SINGULARITY_TMPDIR="${SINGULARITY_TMPDIR:-${TMPDIR:-$HOME}/singularity_tmp}"
 export APPTAINER_TMPDIR="${APPTAINER_TMPDIR:-$SINGULARITY_TMPDIR}"
 export SINGULARITY_LOCALCACHEDIR="${SINGULARITY_LOCALCACHEDIR:-$SINGULARITY_TMPDIR}"
 mkdir -p "$SINGULARITY_TMPDIR"
-# Create cluster's expected session dir if possible
-if mkdir -p /scratch/tmp/singularity/mnt/session 2>/dev/null; then
-  :
-elif mkdir -p "$HOME/scratch/tmp/singularity/mnt/session" 2>/dev/null; then
-  # Use $HOME/scratch if /scratch not writable (may need cluster-specific override)
-  export SINGULARITY_TMPDIR="$HOME/scratch/tmp"
-  export SINGULARITY_LOCALCACHEDIR="$HOME/scratch/tmp"
-fi
 
 mkdir -p "$VLLM_INSTALL_DIR"
 echo "Installing latest vLLM to $VLLM_INSTALL_DIR (requires internet)..."
 if ! "$CNT_BIN" exec --nv --bind "$VLLM_INSTALL_DIR:$VLLM_INSTALL_DIR" "$IMG" \
   pip install --target "$VLLM_INSTALL_DIR" vllm --upgrade; then
   echo ""
-  echo "If you see 'failed to resolve session directory /scratch/tmp/singularity':"
-  echo "  Try: mkdir -p /scratch/tmp/singularity/mnt/session"
+  echo "If you see 'failed to resolve session directory': set SINGULARITY_TMPDIR to a writable path."
   echo "If you see 'Disk quota exceeded': set VLLM_INSTALL_DIR to a dir with more space."
   exit 1
 fi
