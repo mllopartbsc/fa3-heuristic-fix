@@ -1,145 +1,118 @@
-# FlashAttention-3 Tile-Aware Split Heuristic Fix
+# FlashAttention-3 Heuristic Fix — Reproduction Package
 
-This repository contains the reproduction package for the **Tile-Aware Split Heuristic Fix** for FlashAttention-3 on modern NVIDIA Hoppers (H100/H800).
+This repository provides a **reproduction package** for the FlashAttention-3 sequence-aware split heuristic. It includes the C++ patch, benchmarking harnesses, and a unified script to run all kernel-level experiments.
 
-The proposed two-line patch optimally adapts the work-splitting heuristic in low-tile decode scenarios—specifically when `L_K` is between 448 and 512, and `H_KV` is 1 or 2 (e.g., Llama-3 70B MQA/GQA regimes). It yields up to a **1.2x kernel-level speedup** in this specific boundary while maintaining a strictly safe **0 regressions** profile across a 160-configuration tested matrix.
+## Prerequisites
 
-## 💡 Motivation & Industry Impact
+- Linux
+- Hopper GPU (H100 or compatible)
+- CUDA ≥ 12.3
+- PyTorch ≥ 2.4.0
 
-Modern Large Language Models (LLMs) like Llama-3 and Claude rely on **Multi-Query Attention (MQA)** and **Grouped-Query Attention (GQA)** to reduce memory usage during decoding. However, for short context lengths ($L_K \le 512$), this drastically reduces the attention workload per generation step. 
-
-The baseline FlashAttention-3 heuristic miscalculates this specific, highly-common MQA/GQA decoding shape, assigning as few as **8 blocks of work** to an H100 GPU that possesses **132 Streaming Multiprocessors (SMs)**. This causes a severe occupancy collapse, leaving the vast majority of the GPU idle. 
-
-By replacing the naive block with a mathematically rigorous, tile-aware heuristic, this patch correctly identifies the starvation condition and splits the workload across the sequence dimension. The result is a **20% to 24% kernel-level speedup** on Hopper architecture, which translates directly to massive CapEx/OpEx savings and reduced latency (TTFT/TPOT) for at-scale LLM inference deployments.
-
----
-
-## 🚀 Quick Start: Automated Reproduction
-
-We provide a single, fully-automated entry point script that clones FlashAttention-3, applies the patch, builds both baseline and patched versions, runs all benchmarking experiments, generates summary LaTeX tables, and validates the results against the expected claims.
-
-### Option 1: Native Environment (Requires CUDA & PyTorch)
-
-**Prerequisites:** Ubuntu/Linux, H100 GPU, CUDA $\ge$ 12.3, PyTorch $\ge$ 2.4.0.
+## Quick Start
 
 ```bash
-git clone <this-repository>
+git clone <repo-url>
 cd fa3-heuristic-fix
 
-# Run the full automated suite (~5-10 minutes in quick mode)
-python3 reproduce.py --quick
+# Full reproduction (setup + all experiments)
+python3 run_experiments.py --track upstream_patch --quick
 
-# Or run the full statistically-precise suite (~45-60 minutes)
-# python3 reproduce.py
+# Skip setup if FA3 is already built
+python3 run_experiments.py --skip-setup --track upstream_patch --quick
+
+# Run both tracks
+python3 run_experiments.py --track all --quick
 ```
 
-### Option 2: Docker Container (Fully Isolated)
+## Unified Reproduction Script
 
-If you prefer an isolated environment with exact dependency versions:
+`run_experiments.py` is the main entry point. It runs all kernel-level experiments in sequence:
+
+| Experiment | Description |
+|------------|-------------|
+| exp1_correctness | Numerical correctness and determinism |
+| exp2_profiling | Mechanism confirmation via profiling |
+| main_results | Kernel-level latency (main results table) |
+| guard_ablation | Guard ablation study |
+| boundary_sweep | MQA crossover sweep around L_K boundary |
+| u_curve_sweep | Extended split sweep (U-curve) |
+| exp3_safety | Safety and regression profiling (160 configs) |
+| threshold_sensitivity | (latest_stack_tuned track only) |
+
+**Options:**
+
+- `--track` — `upstream_patch`, `latest_stack_tuned`, or `all`
+- `--skip-setup` — Skip cloning and building FA3 (assumes already built)
+- `--quick` — Fewer iterations (~5–15 min per track)
+- `--experiment NAME` — Run only a specific experiment
+
+## Two Benchmark Routes
+
+| Route | Track | Description | Expected speedup |
+|-------|-------|-------------|------------------|
+| **Route 1** | `latest_stack_tuned` | Policy injection + precomputed metadata (same binary) | ~1.18–1.25× |
+| **Route 2** | `upstream_patch` | heuristics.h patch only (the upstream merge path) | ~1.19–1.22× |
+
+Route 2 is what FA3 maintainers would merge: only the `heuristics.h` change. Precomputed metadata enabled.
+
+## Output Layout
+
+- `results/<track>/` — JSON results
+- `artifacts/<track>/` — Generated tables, validation reports
+- `results/published/` — Committed results for reviewers without H100
+
+## Running on HPC (Slurm)
+
+See [REPRODUCTION.md](REPRODUCTION.md) for step-by-step instructions. Quick reference: [RERUN_INSTRUCTIONS.md](RERUN_INSTRUCTIONS.md).
+
+Edit `scripts/submit_slurm.sh` (YOUR_ACCOUNT, YOUR_QOS) once, then:
 
 ```bash
 cd fa3-heuristic-fix
-docker build -t fa3-repro .
-docker run --gpus all -it fa3-repro
+export CONTAINER_IMG=/path/to/vllm_openai.sif
+bash scripts/run_hpc_job.sh
 ```
 
-### Option 3: HPC / SLURM Apptainer (Singularity)
-
-For multi-tenant HPC clusters that don't support Docker:
+Or manually:
 
 ```bash
 cd fa3-heuristic-fix
-apptainer build fa3-repro.sif Apptainer.def
-apptainer run --nv fa3-repro.sif --quick
+# 1. On login node (has network): clone FlashAttention
+bash scripts/prepare_flash_attention.sh
+
+# 2. Edit #SBATCH account/qos in scripts/submit_slurm.sh, then submit
+export CONTAINER_IMG=/path/to/vllm_openai.sif
+sbatch scripts/submit_slurm.sh
 ```
 
----
-
-## 📁 Repository Structure
-
-The reproduction package is strictly curated to include only the essential files:
+## Repository Structure
 
 ```
-├── patch/
-│   └── heuristics.patch                # The proposed two-line C++ fix
-├── reproduce.py                        # Automated entry point orchestrator
-├── README.md                           # This document
-├── requirements.txt                    # Minimal dependencies
-├── Dockerfile / Apptainer.def          # Isolated container builds
-├── configs/
-│   └── experiment_params.yaml          # Benchmarking parameter definitions
-├── expected_results/
-│   └── claims.json                     # Tolerance limits for CI validation
-├── docs/
-│   ├── PR_EVIDENCE.md                  # Concise reviewer evidence packet
-│   └── LATEST_STACK_FINDINGS.md        # Software stack updates analysis
-├── scripts/
-│   ├── setup_environment.sh            # FA3 clone, patch, and dual-build
-│   ├── run_all.sh                      # Execute all experiment scripts
-│   └── generate_tables.py              # Export JSON results to LaTeX
-├── src/
-│   ├── heuristics_reference.py         # Python implementations of policies
-│   ├── bench_utils.py                  # CUDA-Graph timing utilities
-│   └── validate_claims.py              # Automated assertion validation
-└── experiments/
-    ├── exp1_correctness.py             # 1,000-trial FP64 equivalence test
-    ├── exp2_mechanism_profiling.py     # SM active-warp mechanism profiling
-    ├── exp3_safety_verification.py     # 160-cfg zero-regression sweep
-    ├── main_results.py                 # Kernel latency A/B benchmark (Table 5)
-    ├── guard_ablation.py               # Proof of two-guard design (Table 8)
-    ├── boundary_sweep.py               # MQA L_K crossover behavior (Table 9)
-    ├── u_curve_sweep.py                # Service latency vs splits (Fig 2b)
-    ├── e2e_decode_simulation.py        # E2E step & TPOT estimates (Table 6)
-    └── threshold_sensitivity.py        # Robustness of thresholds (Table 10)
+run_experiments.py           # Main entry point (unified reproduction)
+reproduce.py                 # Legacy entry (delegates to run_experiments.py)
+patch/heuristics.patch       # C++ heuristics patch
+scripts/
+  setup_environment.sh       # Build baseline and patched FA3
+  run_experiments_inner.py   # Inner runner (experiments loop)
+  prepare_flash_attention.sh # Clone FA3 (for HPC without GitHub on compute nodes)
+  submit_slurm.sh            # Slurm job script (edit account/qos for your cluster)
+  run_hpc_job.sh             # One-command prepare + submit
+  run_full_benchmark_suite.sh # Kernel + E2E jobs (see docs/BENCHMARKING.md)
+  run_all.sh                 # Alternative: direct sbatch (no container)
+experiments/                 # Individual experiment scripts
+src/                         # Benchmark utilities, heuristics reference
+docs/                        # Methodology, E2E decode, technical details
 ```
 
----
-
-## 🔍 Manual Execution
-
-If you prefer to run individual components:
-
-### 1. Build the Environments
+## Regression Tests
 
 ```bash
-# This will clone https://github.com/Dao-AILab/flash-attention
-# and install dual versions into a local .pydeps/ directory.
-bash scripts/setup_environment.sh
+python3 -m pytest tests/test_dispatch_rule.py -v
 ```
 
-### 2. Run Experiments
+## Notes
 
-You can run individual experiment scripts from the `experiments/` directory:
-
-```bash
-# Run the main headline kernel-latency benchmarks (Table 5)
-python3 experiments/main_results.py
-
-# Run the 160-configuration safety matrix sweep (Table 7)
-python3 experiments/exp3_safety_verification.py
-
-# Run the numerical correctness FP64-equivalence trials
-python3 experiments/exp1_correctness.py
-```
-
-*Note: All python scripts accept a `--quick` flag to reduce iterations for a faster but less statistically precise test run.*
-
-### 3. Verify Results
-
-Experimental results are saved as `.json` files in the `results/` directory. You can automatically validate the generated JSON files against the expected claims:
-
-```bash
-python3 src/validate_claims.py
-```
-
----
-
-## 🛠 Benchmarking Methodology
-
-All performance measurements in this reproduction package adhere to strict methodology to ensure reliability:
-
-*   **CUDA Graphs:** Python dispatch overhead ($\sim$30-55 µs) is explicitly eliminated using CUDA-graph capture and replay to reveal pure kernel time.
-*   **A/B Interleaving:** For any configuration where the policy alters work-split behavior, execution alternates back and forth between baseline and fix graphs to eliminate unobserved thermal/JIT bias.
-*   **Significance Windows:** 10,000 sampling iterations are gathered, returning medians, $P_{05}$, and $P_{95}$ bounds to guarantee statistical significance.
-
-
+- All builds are Hopper-only (SM90).
+- End-to-end (vLLM) experiments require separate infrastructure. See [docs/E2E_DECODE.md](docs/E2E_DECODE.md) and [docs/BENCHMARKING.md](docs/BENCHMARKING.md).
+- See [docs/METHODOLOGY.md](docs/METHODOLOGY.md) for both routes explained.

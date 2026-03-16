@@ -2,63 +2,71 @@
 # ============================================================================
 # Environment Setup: FlashAttention-3 Heuristic Fix Reproduction
 #
-# This script clones FlashAttention-3, applies the two-line patch, and
-# builds both baseline and patched versions for benchmarking.
+# Builds two explicit binary profiles (Hopper-only, SM90):
+#   - baseline:       upstream FA3 at the pinned commit
+#   - upstream_patch: same commit + heuristics.h patch only (what FA3 merges)
 #
-# Prerequisites:
-#   - NVIDIA H100 GPU (or Hopper-class)
-#   - CUDA >= 12.3
-#   - PyTorch >= 2.4.0
-#   - Python >= 3.9
-#
-# Usage:
-#   bash scripts/setup_environment.sh [--baseline-only] [--patched-only]
+# All builds are Hopper-only. Route 2 uses baseline vs patched with precomputed
+# metadata. Route 1 (latest_stack_tuned) reuses baseline and injects from Python.
 # ============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-RESULTS_DIR="$REPO_ROOT/results"
-PYTHON_TARGET="$REPO_ROOT/.pydeps"
+export REPO_ROOT
+RESULTS_DIR="$REPO_ROOT/results/setup"
+PYDEPS_ROOT="$REPO_ROOT/.pydeps"
+BASELINE_ROOT="$PYDEPS_ROOT/baseline"
+UPSTREAM_PATCH_ROOT="$PYDEPS_ROOT/upstream_patch"
+FA3_DIR="$REPO_ROOT/flash-attention"
+PATCH_FILE="$REPO_ROOT/patch/heuristics.patch"
+FA3_COMMIT="fbf24f67"
+
+BUILD_BASELINE=true
+BUILD_PATCHED=true
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --baseline-only) BUILD_PATCHED=false; shift ;;
+        --patched-only) BUILD_BASELINE=false; shift ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
+done
+
+mkdir -p "$RESULTS_DIR"
+mkdir -p "$PYDEPS_ROOT"
+
+export MAX_JOBS="${MAX_JOBS:-20}"
+export FLASH_ATTENTION_FORCE_BUILD=TRUE
+# Hopper-only minimal build (faster): SM90, hdim128, no backward/FP8/other head dims
+export FLASH_ATTENTION_DISABLE_SM80=TRUE
+export FLASH_ATTENTION_DISABLE_BACKWARD=TRUE
+export FLASH_ATTENTION_DISABLE_FP8=TRUE
+export FLASH_ATTENTION_DISABLE_HDIM64=TRUE
+export FLASH_ATTENTION_DISABLE_HDIM96=TRUE
+export FLASH_ATTENTION_DISABLE_HDIM192=TRUE
+export FLASH_ATTENTION_DISABLE_HDIM256=TRUE
 
 echo "============================================"
 echo "  FlashAttention-3 Heuristic Fix — Setup"
 echo "============================================"
 echo
-
-mkdir -p "$RESULTS_DIR"
-mkdir -p "$PYTHON_TARGET"
-
-# Install into a repo-local site-packages directory so containerized runs do
-# not depend on write access to system Python paths.
-export PYTHONPATH="$PYTHON_TARGET${PYTHONPATH:+:$PYTHONPATH}"
-
-# Cap Torch/Ninja parallelism to avoid overcommitting memory during FA3 builds.
-export MAX_JOBS="${MAX_JOBS:-20}"
-# Only build SM90 (H100/Hopper) kernels — SM80 is not needed for this reproduction.
-export FLASH_ATTENTION_DISABLE_SM80=TRUE
-export FLASH_ATTENTION_FORCE_BUILD=TRUE
-echo "  MAX_JOBS: $MAX_JOBS"
-echo "  DISABLE_SM80: $FLASH_ATTENTION_DISABLE_SM80"
-echo "  PYTHON_TARGET: $PYTHON_TARGET"
+echo "  Pinned commit:     $FA3_COMMIT"
+echo "  Build:             Hopper-only, hdim128, no backward/FP8 (faster)"
+echo "  Baseline root:     $BASELINE_ROOT"
+echo "  Upstream root:     $UPSTREAM_PATCH_ROOT"
+echo "  Patch artifact:    $PATCH_FILE"
 echo
 
-# ── Check prerequisites ──────────────────────────────────────────────────
-echo "[1/5] Checking prerequisites..."
-
+echo "[1/6] Checking prerequisites..."
 if ! command -v nvcc &>/dev/null; then
     echo "ERROR: nvcc not found. Please ensure CUDA >= 12.3 is installed."
     exit 1
 fi
-
-CUDA_VERSION=$(nvcc --version | grep -oP 'release \K[0-9]+\.[0-9]+')
-echo "  CUDA version: $CUDA_VERSION"
-
 python3 -c "import torch; print(f'  PyTorch version: {torch.__version__}')" || {
     echo "ERROR: PyTorch not found. Please install PyTorch >= 2.4.0."
     exit 1
 }
-
 python3 -c "
 import torch
 assert torch.cuda.is_available(), 'CUDA not available'
@@ -67,153 +75,124 @@ print(f'  GPU: {props.name} ({props.multi_processor_count} SMs)')
 if props.multi_processor_count < 100:
     print('  WARNING: This GPU has fewer SMs than H100 (132). Results will differ.')
 "
-
 echo
 
-# ── Clone FlashAttention-3 ───────────────────────────────────────────────
-FA3_DIR="$REPO_ROOT/flash-attention"
-FA3_COMMIT="fbf24f67"  # Baseline version
-
-echo "[2/5] Setting up FlashAttention-3..."
-
-if [ -d "$FA3_DIR" ]; then
-    echo "  flash-attention/ already exists. Skipping clone."
+echo "[2/6] Preparing FlashAttention clone..."
+if [[ -d "$FA3_DIR/.git" ]]; then
+    echo "  Reusing existing flash-attention clone."
 else
     echo "  Cloning FlashAttention-3..."
     git clone https://github.com/Dao-AILab/flash-attention.git "$FA3_DIR"
 fi
-
-cd "$FA3_DIR"
-
-# Checkout the exact commit
-# echo "  Checking out baseline commit $FA3_COMMIT..."
-# git fetch origin
-# git checkout "$FA3_COMMIT" 2>/dev/null || {
-#     echo "  WARNING: Could not checkout exact commit $FA3_COMMIT."
-#     echo "  Using current HEAD instead. Results may differ slightly."
-# }
-
 echo
 
-# ── Build baseline ───────────────────────────────────────────────────────
-if [[ "${1:-}" != "--patched-only" ]]; then
-    echo "[3/5] Building BASELINE FlashAttention-3..."
-    echo "  This may take 10-30 minutes depending on your system."
-
-    # Reset any patches
-    git checkout -- hopper/heuristics.h 2>/dev/null || true
-
-    # Build
-    cd "$FA3_DIR/hopper"
-    rm -rf "$PYTHON_TARGET"/flash_attn*
-    rm -rf "$PYTHON_TARGET"/flash_attn_3*
-    python3 -m pip install \
-        --no-build-isolation \
-        --no-deps \
-        --upgrade \
-        --target "$PYTHON_TARGET" \
-        . 2>&1 | tee "$RESULTS_DIR/setup_baseline_build.log"
-
-    echo "  Baseline build complete."
-    echo
-fi
-
-# ── Apply patch and build patched version ────────────────────────────────
-if [[ "${1:-}" != "--baseline-only" ]]; then
-    echo "[4/5] Applying tile-aware fix and building PATCHED version..."
-
+ensure_clean_checkout() {
     cd "$FA3_DIR"
-
-    # Apply the patch
-    # The patch modifies a single guard in hopper/heuristics.h
-    HEURISTICS_FILE="hopper/heuristics.h"
-
-    # Check if the baseline guard is still present (not yet patched)
-    if grep -q 'if (num_n_blocks <= 4) { return 1; }' "$HEURISTICS_FILE"; then
-        echo "  Found premature guard. Applying two-line fix..."
-
-        # The actual patch: replace the single guard with two tile-aware guards.
-        # Use the same regex as the Dockerfile for consistency.
-        python3 -c "
-import re, sys
-
-path = '$HEURISTICS_FILE'
-with open(path, 'r') as f:
-    src = f.read()
-
-if 'num_n_blocks <= 4' not in src:
-    print('ERROR: Could not find baseline guard in heuristics.h', file=sys.stderr)
-    sys.exit(1)
-
-old = r'if \(num_n_blocks <= 4\) \{ return 1; \}'
-new = (
-    '// Guard 1: L_K <= 384 (nblk <= 3) -- combine cost always too high\\n'
-    '    if (num_n_blocks <= 3) { return 1; }\\n'
-    '\\n'
-    '    // Guard 2: L_K = 448-512 (nblk = 4) with enough tiles\\n'
-    '    // total_mblocks == batch_size * num_heads (function parameter)\\n'
-    '    if (num_n_blocks <= 4 && total_mblocks >= 4) { return 1; }'
-)
-
-patched = re.sub(old, new, src, count=1)
-if patched == src:
-    print('ERROR: Regex replacement failed — check heuristics.h format', file=sys.stderr)
-    sys.exit(1)
-
-with open(path, 'w') as f:
-    f.write(patched)
-
-print('Patch applied: heuristics.h')
-print('  - Guard 1: if (num_n_blocks <= 3) { return 1; }')
-print('  - Guard 2: if (num_n_blocks <= 4 && total_mblocks >= 4) { return 1; }')
-"
-    elif grep -q 'num_n_blocks <= 3' "$HEURISTICS_FILE"; then
-        echo "  Patch already applied (found Guard 1 signature). Skipping."
-    else
-        echo "  WARNING: Neither the baseline guard nor the patch was found."
-        echo "  Check $HEURISTICS_FILE manually."
+    git fetch --all --tags >/dev/null 2>&1 || true
+    # Force checkout to discard any leftover patch from previous runs
+    git checkout -f "$FA3_COMMIT" >/dev/null 2>&1 || {
+        echo "ERROR: Could not checkout pinned commit $FA3_COMMIT."
+        exit 1
+    }
+    if [[ -n "$(git status --porcelain)" ]]; then
+        echo "ERROR: $FA3_DIR has local modifications after checkout."
+        git status --short
+        exit 1
     fi
-
-    # Build patched version
-    cd "$FA3_DIR/hopper"
-    rm -rf "$PYTHON_TARGET"/flash_attn*
-    rm -rf "$PYTHON_TARGET"/flash_attn_3*
-    python3 -m pip install \
-        --no-build-isolation \
-        --no-deps \
-        --upgrade \
-        --target "$PYTHON_TARGET" \
-        . 2>&1 | tee "$RESULTS_DIR/setup_patched_build.log"
-
-    echo "  Patched build complete."
-    echo
-fi
-
-# ── Verify installation ──────────────────────────────────────────────────
-echo "[5/5] Verifying installation..."
-
-python3 -c "
-import flash_attn_interface
-print('  flash_attn_interface imported successfully.')
-print(f'  Module location: {flash_attn_interface.__file__}')
-" || {
-    echo "  ERROR: Could not import flash_attn_interface."
-    echo "  Please check the build output above for errors."
-    exit 1
 }
 
+install_profile() {
+    local target_root="$1"
+    local build_label="$2"
+    rm -rf "$target_root"
+    mkdir -p "$target_root"
+    python3 "$REPO_ROOT/scripts/apply_hopper_only_setup.py" "$FA3_DIR/hopper/setup.py" || true
+    cd "$FA3_DIR/hopper"
+    # Force full recompile: remove stale build artifacts (pip/ninja cache can
+    # return in ~30s otherwise, producing wrong or inconsistent binaries)
+    rm -rf build/ dist/ *.egg-info
+    # Progress: run pip and a background timer that prints elapsed time every 30s
+    (
+        BUILD_START=$(date +%s)
+        while true; do
+            sleep 30
+            ELAPSED=$(($(date +%s) - BUILD_START))
+            echo "  [Build progress] $((ELAPSED / 60))m $((ELAPSED % 60))s elapsed..."
+        done
+    ) &
+    PROGRESS_PID=$!
+    python3 -m pip install \
+        --no-build-isolation \
+        --no-deps \
+        --upgrade \
+        --target "$target_root" \
+        . 2>&1 | tee "$RESULTS_DIR/${build_label}_build.log"
+    PIP_EXIT=$?
+    kill $PROGRESS_PID 2>/dev/null || true
+    wait $PROGRESS_PID 2>/dev/null || true
+    [ $PIP_EXIT -eq 0 ] || exit $PIP_EXIT
+}
+
+verify_profile() {
+    local target_root="$1"
+    local label="$2"
+    local pycode="import flash_attn_interface; print('  [${label}] flash_attn_interface:', flash_attn_interface.__file__)"
+    PYTHONPATH="$target_root${PYTHONPATH:+:$PYTHONPATH}" python3 -c "$pycode" || {
+        echo "ERROR: Could not import flash_attn_interface from $target_root"
+        exit 1
+    }
+}
+
+if [[ "$BUILD_BASELINE" == "true" ]]; then
+    echo "[3/6] Building baseline profile..."
+    ensure_clean_checkout
+    install_profile "$BASELINE_ROOT" "baseline"
+    verify_profile "$BASELINE_ROOT" "baseline"
+    echo
+fi
+
+if [[ "$BUILD_PATCHED" == "true" ]]; then
+    echo "[4/6] Applying upstream patch and building patched profile..."
+    ensure_clean_checkout
+    if git apply --check "$PATCH_FILE" 2>/dev/null; then
+        git apply "$PATCH_FILE"
+    else
+        echo "  (git apply failed, using direct patch script)"
+        python3 "$REPO_ROOT/scripts/apply_heuristics_patch.py" || {
+            echo "ERROR: Failed to apply heuristics patch."
+            exit 1
+        }
+    fi
+    install_profile "$UPSTREAM_PATCH_ROOT" "upstream_patch"
+    verify_profile "$UPSTREAM_PATCH_ROOT" "upstream_patch"
+    echo
+fi
+
+echo "[5/6] Writing build manifest..."
+python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+repo_root = Path(os.environ["REPO_ROOT"])
+manifest = {
+    "flash_attention_commit": "fbf24f67",
+    "profiles": {
+        "baseline": str(repo_root / ".pydeps" / "baseline"),
+        "upstream_patch": str(repo_root / ".pydeps" / "upstream_patch"),
+    },
+    "latest_stack_tuned_runtime_profile": "baseline",
+    "patch_artifact": str(repo_root / "patch" / "heuristics.patch"),
+}
+out = repo_root / "artifacts" / "build_manifest.json"
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(json.dumps(manifest, indent=2))
+print(f"  Build manifest: {out}")
+PY
 echo
-echo "============================================"
-echo "  Setup complete!"
-echo "============================================"
+
+echo "[6/6] Setup complete."
 echo
-echo "Repo-local Python packages:"
-echo "  $PYTHON_TARGET"
-echo
-echo "To run all experiments:"
-echo "  cd $REPO_ROOT"
-echo "  bash scripts/run_all.sh"
-echo
-echo "To run a single experiment:"
-echo "  cd $REPO_ROOT"
-echo "  python3 experiments/main_results.py"
+echo "To run experiments:"
+echo "  python3 run_experiments.py --track upstream_patch --quick"
+echo "  python3 run_experiments.py --track latest_stack_tuned --quick"

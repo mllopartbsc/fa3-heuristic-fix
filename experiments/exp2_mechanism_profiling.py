@@ -1,27 +1,19 @@
 #!/usr/bin/env python3
 """
 Experiment 2: Mechanism Confirmation via Profiling
-═══════════════════════════════════════════════════
 
-Measures SM throughput, active warps, and grid size under baseline (splits=1)
-vs forced splitting (splits=16) to confirm the grid-underfill hypothesis.
-
-This script provides the data for Table 3 (Counter Attribution) and
-Figure 2a (Reconstructed Decode Timeline).
-
-NOTE: For full Nsight Compute profiling, use:
-  ncu --set full --target-processes all python experiments/exp2_mechanism_profiling.py
-
-Output: results/exp2_profiling.json
+Common mechanism experiment shared by both tracks.
 """
 
-import sys
+import argparse
 import os
-import json
+import sys
+
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from src.bench_utils import make_decode_tensors, measure_kernel_us
+from src.track_config import add_results_dir_argument, add_track_argument, write_track_json
 
 try:
     import flash_attn_interface
@@ -30,11 +22,12 @@ except ImportError:
     sys.exit(1)
 
 
-def run():
+def run(*, track: str, results_dir=None):
     device = "cuda"
     sm_count = torch.cuda.get_device_properties(0).multi_processor_count
     device_name = torch.cuda.get_device_name(0)
     print(f"Device: {device_name} ({sm_count} SMs)")
+    print(f"Track: {track} (common experiment)")
     print()
 
     configs = [
@@ -94,21 +87,24 @@ def run():
     print("      dram__throughput), run this script under ncu:")
     print("  ncu --set full python experiments/exp2_mechanism_profiling.py")
 
-    os.makedirs("results", exist_ok=True)
-    output = {
-        "experiment": "exp2_mechanism_profiling",
-        "device": device_name,
-        "sm_count": sm_count,
-        "results": results,
-    }
-    with open("results/exp2_profiling.json", "w") as f:
-        json.dump(output, f, indent=2)
-    print(f"Results saved to results/exp2_profiling.json")
+    out_path = write_track_json(
+        {
+            "device": device_name,
+            "sm_count": sm_count,
+            "results": results,
+        },
+        experiment="exp2_profiling",
+        track=track,
+        results_dir=results_dir,
+        benchmark_mode="manual_split_mechanism_common",
+    )
+    print(f"Results saved to {out_path}")
 
 
 if __name__ == "__main__":
-    import argparse
     parser = argparse.ArgumentParser(description="Experiment 2: Mechanism Profiling")
+    add_track_argument(parser)
+    add_results_dir_argument(parser)
     parser.add_argument("--quick", action="store_true",
                         help="Quick mode: fewer timing iterations")
     args = parser.parse_args()
@@ -116,4 +112,4 @@ if __name__ == "__main__":
     if args.quick:
         import src.bench_utils as _bu
         _bu.DEFAULT_TOTAL_ITERS = 2000
-    run()
+    run(track=args.track, results_dir=args.results_dir)

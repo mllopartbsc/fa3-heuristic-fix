@@ -1,26 +1,32 @@
 """
 Shared CUDA-Graph benchmarking utilities for all reproduction experiments.
 
-Every timing function captures the kernel into a CUDA Graph and replays it,
-eliminating Python dispatch overhead (~30-55 us per eager call). Timing uses
-CUDA Events recorded around graph replay, reporting the median of per-call
-samples.
+Two benchmark routes:
 
-Protocol:
-  - 200 warmup graph replays (thermal + JIT stabilization)
-  - 10,000 timed iterations in 50-iteration sample windows (→ 200 samples)
-  - A/B interleaved comparison to eliminate ordering/thermal bias
-  - Median as primary statistic; P5/P95 for significance testing
+  1. Route 1 (policy_injected): Python injects num_splits + precomputed
+     scheduler_metadata. Same binary. Used for latest_stack_tuned track.
 
-Usage:
-  from src.bench_utils import measure_kernel_us, make_decode_tensors
+  2. Route 2 (patched_binary_with_metadata): Heuristics.h patch only + precomputed
+     metadata. What FA3 maintainers merge. Baseline vs patched in subprocesses;
+     each uses its heuristic's output for num_splits + precomputed metadata.
 """
 
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
 import statistics
+import subprocess
+import sys
+
 import torch
 
 # Lazy import — flash_attn_interface must be installed (see setup_environment.sh)
 _flash_attn = None
+REPO_ROOT = Path(__file__).resolve().parents[1]
+COMPILED_POLICY_RUNNER = REPO_ROOT / "src" / "compiled_policy_runner.py"
+COMPILED_POLICY_RUNNER_WITH_METADATA = REPO_ROOT / "src" / "compiled_policy_runner_with_metadata.py"
 
 
 def _get_flash_attn():
@@ -50,7 +56,7 @@ def build_flash_kwargs(
     pack_gqa=None,
     causal: bool = True,
 ):
-    """Build fair, precomputed scheduler metadata kwargs for FA3 decode."""
+    """Build kwargs for the policy-injected latest-stack benchmark path."""
     fa = _get_flash_attn()
     return {
         "pack_gqa": pack_gqa,
@@ -146,6 +152,33 @@ def measure_kernel_us(
     return float(statistics.median(samples))
 
 
+def measure_kernel_us_auto_policy(
+    *,
+    q, k_cache, v_cache, cache_seqlens, rotary_cos, rotary_sin, k, v,
+    causal: bool = True,
+    warmups: int = DEFAULT_WARMUPS,
+    total_iters: int = DEFAULT_TOTAL_ITERS,
+    sample_iters: int = DEFAULT_SAMPLE_ITERS,
+) -> float:
+    """
+    Returns median per-call kernel latency with split selection left entirely to
+    the compiled FA3 binary.
+    """
+    fa = _get_flash_attn()
+
+    def _kernel():
+        return fa.flash_attn_with_kvcache(
+            q, k_cache, v_cache, k=k, v=v,
+            cache_seqlens=cache_seqlens,
+            rotary_cos=rotary_cos, rotary_sin=rotary_sin,
+            causal=causal,
+        )
+
+    g, _ = _capture_graph(_kernel)
+    samples = _timed_replay(g, warmups, total_iters, sample_iters)
+    return float(statistics.median(samples))
+
+
 def measure_kernel_us_detailed(
     *,
     q, k_cache, v_cache, cache_seqlens, rotary_cos, rotary_sin, k, v,
@@ -170,6 +203,43 @@ def measure_kernel_us_detailed(
             rotary_cos=rotary_cos, rotary_sin=rotary_sin,
             causal=causal, num_splits=num_splits,
             **flash_kwargs,
+        )
+
+    g, _ = _capture_graph(_kernel)
+    samples = _timed_replay(g, warmups, total_iters, sample_iters)
+    samples.sort()
+    n = len(samples)
+    return {
+        "median": statistics.median(samples),
+        "mean": statistics.mean(samples),
+        "stdev": statistics.stdev(samples) if n > 1 else 0.0,
+        "p5": samples[max(0, int(n * 0.05))],
+        "p95": samples[min(n - 1, int(n * 0.95))],
+        "iqr": samples[int(n * 0.75)] - samples[int(n * 0.25)],
+        "n_samples": n,
+    }
+
+
+def measure_kernel_us_detailed_auto_policy(
+    *,
+    q, k_cache, v_cache, cache_seqlens, rotary_cos, rotary_sin, k, v,
+    causal: bool = True,
+    warmups: int = DEFAULT_WARMUPS,
+    total_iters: int = DEFAULT_TOTAL_ITERS,
+    sample_iters: int = DEFAULT_SAMPLE_ITERS,
+) -> dict:
+    """
+    Like measure_kernel_us_detailed but leaves split selection to the compiled
+    heuristic in the loaded FA3 binary.
+    """
+    fa = _get_flash_attn()
+
+    def _kernel():
+        return fa.flash_attn_with_kvcache(
+            q, k_cache, v_cache, k=k, v=v,
+            cache_seqlens=cache_seqlens,
+            rotary_cos=rotary_cos, rotary_sin=rotary_sin,
+            causal=causal,
         )
 
     g, _ = _capture_graph(_kernel)
@@ -365,6 +435,191 @@ def find_optimal_splits(
         "best_splits": best[0],
         "best_latency": best[1],
         "all_results": results,
+    }
+
+
+def _runner_env(profile_root: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    python_entries = [str(profile_root), str(REPO_ROOT)]
+    existing = env.get("PYTHONPATH")
+    if existing:
+        python_entries.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(python_entries)
+    return env
+
+
+def measure_compiled_profile_detailed(
+    *,
+    profile_root: Path,
+    batch: int,
+    lk: int,
+    hq: int,
+    hkv: int,
+    d: int = 128,
+    causal: bool = True,
+    warmups: int = DEFAULT_WARMUPS,
+    total_iters: int = DEFAULT_TOTAL_ITERS,
+    sample_iters: int = DEFAULT_SAMPLE_ITERS,
+) -> dict:
+    """
+    Measure a compiled FA3 profile by spawning a clean Python subprocess whose
+    PYTHONPATH points at a single installed build root.
+    """
+    cmd = [
+        sys.executable,
+        str(COMPILED_POLICY_RUNNER),
+        "--batch", str(batch),
+        "--lk", str(lk),
+        "--hq", str(hq),
+        "--hkv", str(hkv),
+        "--d", str(d),
+        "--warmups", str(warmups),
+        "--total-iters", str(total_iters),
+        "--sample-iters", str(sample_iters),
+    ]
+    if causal:
+        cmd.append("--causal")
+    out = subprocess.check_output(cmd, env=_runner_env(profile_root), text=True)
+    return json.loads(out)
+
+
+def measure_compiled_profile_pair(
+    *,
+    baseline_profile_root: Path,
+    candidate_profile_root: Path,
+    batch: int,
+    lk: int,
+    hq: int,
+    hkv: int,
+    d: int = 128,
+    causal: bool = True,
+    warmups: int = DEFAULT_WARMUPS,
+    total_iters: int = DEFAULT_TOTAL_ITERS,
+    sample_iters: int = DEFAULT_SAMPLE_ITERS,
+) -> dict:
+    base = measure_compiled_profile_detailed(
+        profile_root=baseline_profile_root,
+        batch=batch,
+        lk=lk,
+        hq=hq,
+        hkv=hkv,
+        d=d,
+        causal=causal,
+        warmups=warmups,
+        total_iters=total_iters,
+        sample_iters=sample_iters,
+    )
+    candidate = measure_compiled_profile_detailed(
+        profile_root=candidate_profile_root,
+        batch=batch,
+        lk=lk,
+        hq=hq,
+        hkv=hkv,
+        d=d,
+        causal=causal,
+        warmups=warmups,
+        total_iters=total_iters,
+        sample_iters=sample_iters,
+    )
+    base_med = float(base["median"])
+    candidate_med = float(candidate["median"])
+    return {
+        "baseline": base,
+        "candidate": candidate,
+        "speedup": base_med / candidate_med if candidate_med > 0 else float("nan"),
+        "significant": float(candidate["p95"]) < float(base["p5"]),
+    }
+
+
+def measure_compiled_profile_detailed_with_metadata(
+    *,
+    profile_root: Path,
+    policy: str,
+    batch: int,
+    lk: int,
+    hq: int,
+    hkv: int,
+    d: int = 128,
+    causal: bool = True,
+    warmups: int = DEFAULT_WARMUPS,
+    total_iters: int = DEFAULT_TOTAL_ITERS,
+    sample_iters: int = DEFAULT_SAMPLE_ITERS,
+) -> dict:
+    """
+    Route 2: Measure a compiled FA3 profile with precomputed scheduler_metadata.
+    The policy (baseline or upstream_patch) determines num_splits; the subprocess
+    loads the profile's FA3 binary.
+    """
+    cmd = [
+        sys.executable,
+        str(COMPILED_POLICY_RUNNER_WITH_METADATA),
+        "--policy", policy,
+        "--batch", str(batch),
+        "--lk", str(lk),
+        "--hq", str(hq),
+        "--hkv", str(hkv),
+        "--d", str(d),
+        "--warmups", str(warmups),
+        "--total-iters", str(total_iters),
+        "--sample-iters", str(sample_iters),
+    ]
+    if causal:
+        cmd.append("--causal")
+    out = subprocess.check_output(cmd, env=_runner_env(profile_root), text=True)
+    return json.loads(out)
+
+
+def measure_compiled_profile_pair_with_metadata(
+    *,
+    baseline_profile_root: Path,
+    candidate_profile_root: Path,
+    batch: int,
+    lk: int,
+    hq: int,
+    hkv: int,
+    d: int = 128,
+    causal: bool = True,
+    warmups: int = DEFAULT_WARMUPS,
+    total_iters: int = DEFAULT_TOTAL_ITERS,
+    sample_iters: int = DEFAULT_SAMPLE_ITERS,
+) -> dict:
+    """
+    Route 2: Baseline vs patched binary, both with precomputed scheduler_metadata.
+    Shows the patch improves when used with precomputed metadata (upstream merge path).
+    """
+    base = measure_compiled_profile_detailed_with_metadata(
+        profile_root=baseline_profile_root,
+        policy="baseline",
+        batch=batch,
+        lk=lk,
+        hq=hq,
+        hkv=hkv,
+        d=d,
+        causal=causal,
+        warmups=warmups,
+        total_iters=total_iters,
+        sample_iters=sample_iters,
+    )
+    candidate = measure_compiled_profile_detailed_with_metadata(
+        profile_root=candidate_profile_root,
+        policy="upstream_patch",
+        batch=batch,
+        lk=lk,
+        hq=hq,
+        hkv=hkv,
+        d=d,
+        causal=causal,
+        warmups=warmups,
+        total_iters=total_iters,
+        sample_iters=sample_iters,
+    )
+    base_med = float(base["median"])
+    candidate_med = float(candidate["median"])
+    return {
+        "baseline": base,
+        "candidate": candidate,
+        "speedup": base_med / candidate_med if candidate_med > 0 else float("nan"),
+        "significant": float(candidate["p95"]) < float(base["p5"]),
     }
 
 

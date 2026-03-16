@@ -1,47 +1,8 @@
 {
-  "headline_claims": {
-    "mqa_512_speedup": {
-      "expected_value": "1.12x",
-      "min": 1.10,
-      "max": 1.30,
-      "description": "Speedup for H_KV=1, L_K=512"
-    },
-    "gqa2_512_speedup": {
-      "expected_value": "1.15x",
-      "min": 1.13,
-      "max": 1.30,
-      "description": "Speedup for H_KV=2, L_K=512"
-    },
-    "mqa_512_statistical_significance": {
-      "expected_value": "P95_fix < P5_base",
-      "description": "Non-overlapping confidence intervals"
-    },
-    "zero_regressions": {
-      "expected_value": 0,
-      "required_regressions": 0,
-      "description": "Zero regressions found in the 160-cfg sweep"
-    },
-    "correctness_verdict": {
-      "expected_value": "PASS",
-      "required_verdict": "PASS",
-      "description": "Max abs/rel error within FP64 precision limits"
-    },
-    "correctness_max_abs_error": {
-      "expected_value": "< 1e-3",
-      "max": 0.005,
-      "description": "Worst-case absolute difference vs upcasted reference"
-    },
-    "safe_regime_neutral_mqa_384": {
-      "expected_value": "1.00x",
-      "min_speedup": 0.98,
-      "max_speedup": 1.02,
-      "description": "No measurable change in latency when Guard 1 triggers"
-    },
-    "safe_regime_neutral_gqa8_512": {
-      "expected_value": "1.00x",
-      "min_speedup": 0.98,
-      "max_speedup": 1.02,
-      "description": "No measurable change in latency when Guard 2 triggers"
-    }
+  "deprecated": true,
+  "message": "This repo now uses track-specific claim files.",
+  "tracks": {
+    "upstream_patch": "expected_results/upstream_patch/claims.json",
+    "latest_stack_tuned": "expected_results/latest_stack_tuned/claims.json"
   }
 }

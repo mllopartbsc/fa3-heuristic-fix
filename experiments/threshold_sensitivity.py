@@ -1,23 +1,16 @@
 #!/usr/bin/env python3
 """
 Threshold Sensitivity Sweep
-═══════════════════════════════════════════════
 
-Tests the robustness of the chosen parameter values in the tile-aware heuristic:
-- Guard 1 threshold: nblk <= 3 vs nblk <= 4
-- Guard 2 threshold: tiles >= 4 vs tiles >= 8
-- Low-tile Splits: 3 vs 4
-
-Confirms that while alternative nearby thresholds are also safe, the chosen
-parameters (nblk<=3, tiles>=4, splits=3) yield the best overall performance
-on the modern stack.
-
-Output: results/threshold_sensitivity.json
+Latest-stack-tuned-only experiment. This study is not part of the upstream
+patch track because it explicitly compares low-tile `s=3` against nearby
+latest-stack alternatives.
 """
 
-import sys
+import argparse
 import os
-import json
+import sys
+
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -29,6 +22,12 @@ from src.bench_utils import (
     DEFAULT_WARMUPS,
     DEFAULT_TOTAL_ITERS,
     DEFAULT_SAMPLE_ITERS,
+)
+from src.track_config import (
+    TRACK_LATEST_STACK_TUNED,
+    add_results_dir_argument,
+    add_track_argument,
+    write_track_json,
 )
 
 
@@ -54,10 +53,14 @@ def custom_splits(b, hkv, lk, d, num_sms, g1_nblk, g2_tiles, low_tile_splits):
     return 2  # Dummy fallback for this specific limited sweep
 
 
-def run(quick: bool = False):
+def run(*, track: str, quick: bool = False, results_dir=None):
+    if track != TRACK_LATEST_STACK_TUNED:
+        raise SystemExit("threshold_sensitivity is only defined for the latest_stack_tuned track")
+
     sm_count = torch.cuda.get_device_properties(0).multi_processor_count
     device = torch.cuda.get_device_name(0)
     print(f"Device: {device} ({sm_count} SMs)")
+    print(f"Track: {track}")
 
     iters = 2000 if quick else 10000
 
@@ -116,21 +119,24 @@ def run(quick: bool = False):
             "relative_speedup": round(rel, 3),
         })
 
-    os.makedirs("results", exist_ok=True)
-    output = {
-        "experiment": "threshold_sensitivity",
-        "config": {"B": B, "H_KV": H_KV, "L_K": L_K},
-        "device": device,
-        "results": results,
-    }
-    with open("results/threshold_sensitivity.json", "w") as f:
-        json.dump(output, f, indent=2)
-    print(f"\nResults saved to results/threshold_sensitivity.json")
+    out_path = write_track_json(
+        {
+            "config": {"B": B, "H_KV": H_KV, "L_K": L_K},
+            "device": device,
+            "results": results,
+        },
+        experiment="threshold_sensitivity",
+        track=track,
+        results_dir=results_dir,
+        benchmark_mode="policy_injected_threshold_sweep",
+    )
+    print(f"\nResults saved to {out_path}")
 
 
 if __name__ == "__main__":
-    import argparse
     parser = argparse.ArgumentParser()
+    add_track_argument(parser)
+    add_results_dir_argument(parser)
     parser.add_argument("--quick", action="store_true")
     args = parser.parse_args()
-    run(quick=args.quick)
+    run(track=args.track, quick=args.quick, results_dir=args.results_dir)

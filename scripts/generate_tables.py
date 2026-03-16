@@ -1,55 +1,85 @@
 #!/usr/bin/env python3
 """
-Generate LaTeX Tables from JSON Results
-═══════════════════════════════════════
-Reads the output JSON files in results/ and generates a single
-LaTeX file containing the benchmark results.
-
-Usage:
-  python3 scripts/generate_tables.py --results-dir results/ --output-tex results/tables.tex
+Generate reviewer-facing LaTeX tables from track-scoped result JSON files.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
-import os
+from pathlib import Path
 import sys
 
-def _load_json(filename):
-    if os.path.exists(filename):
-        with open(filename, 'r') as f:
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from src.track_config import (
+    TRACK_UPSTREAM_PATCH,
+    add_track_argument,
+    add_results_dir_argument,
+    artifacts_dir_for_track,
+)
+
+
+def _load_json(path: Path):
+    if path.exists():
+        with open(path, "r") as f:
             return json.load(f)
     return None
 
+
+def _candidate_label(track: str) -> str:
+    return "Upstream Patch" if track == TRACK_UPSTREAM_PATCH else "Latest-Stack Tuned"
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate LaTeX tables from results")
-    parser.add_argument("--results-dir", default="results/")
-    parser.add_argument("--output-tex", default="results/tables.tex")
+    add_track_argument(parser)
+    add_results_dir_argument(parser)
+    parser.add_argument("--output-tex", default=None, type=Path)
     args = parser.parse_args()
 
-    results_dir = args.results_dir
-    output_files = []
+    results_dir = args.results_dir or (Path("results") / args.track)
+    output_tex = args.output_tex or (artifacts_dir_for_track(args.track) / "tables.tex")
+    output_tex.parent.mkdir(parents=True, exist_ok=True)
 
-    # Table 5: Main Results
-    main_res = _load_json(os.path.join(results_dir, "main_results.json"))
-    if main_res and "results" in main_res:
-        with open(args.output_tex, "w") as f:
-            f.write("% Table 5: Main Results (Generated)\n")
+    main_res = _load_json(results_dir / "main_results.json")
+    boundary = _load_json(results_dir / "boundary_sweep.json")
+
+    with open(output_tex, "w") as f:
+        f.write("% Reviewer-facing tables generated from track-scoped results\n")
+        f.write(f"% track: {args.track}\n\n")
+
+        if main_res and "results" in main_res:
+            label = _candidate_label(args.track)
             f.write("\\begin{table}[h]\n\\centering\n")
+            f.write(f"\\caption{{Main Results ({label})}}\n")
             f.write("\\begin{tabular}{llrrr}\n\\toprule\n")
-            f.write("$L_K$ & $H_{KV}$ & Baseline (\\si{\\us}) & Fix (\\si{\\us}) & Speedup \\\\\n\\midrule\n")
-            for r in main_res["results"]:
-                lk = r["L_K"]
-                hkv = r["H_KV"]
-                base = f"{r['baseline_median_us']:.1f}"
-                fix = f"{r['fix_median_us']:.1f}"
-                spd = f"{r['speedup']:.2f}\\times"
-                sig = "*" if r.get("significant", False) else ""
-                f.write(f"{lk} & {hkv} & {base} & {fix} & {spd}{sig} \\\\\n")
+            f.write("$L_K$ & $H_{KV}$ & Baseline (\\si{\\us}) & Candidate (\\si{\\us}) & Speedup \\\\\n\\midrule\n")
+            for row in main_res["results"]:
+                lk = row["L_K"]
+                hkv = row["H_KV"]
+                base = f"{row['baseline_median_us']:.2f}"
+                cand = f"{row['fix_median_us']:.2f}"
+                spd = f"{row['speedup']:.2f}\\times"
+                sig = "*" if row.get("significant", False) else ""
+                f.write(f"{lk} & {hkv} & {base} & {cand} & {spd}{sig} \\\\\n")
             f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n\n")
 
-    # This is a simplified stub. In a full reproducible workflow, this script
-    # formats all the resulting JSON files into the exact LaTeX tables.
-    print(f"Tables written to {args.output_tex} (simplified output)")
+        if boundary and "results" in boundary:
+            f.write("\\begin{table}[h]\n\\centering\n")
+            f.write("\\caption{Boundary Sweep Summary}\n")
+            f.write("\\begin{tabular}{rrrrr}\n\\toprule\n")
+            f.write("$L_K$ & nBlk & Baseline (\\si{\\us}) & Candidate (\\si{\\us}) & Speedup \\\\\n\\midrule\n")
+            for row in boundary["results"]:
+                f.write(
+                    f"{row['L_K']} & {row['nblk']} & "
+                    f"{row['baseline_us']:.2f} & {row['fix_us']:.2f} & "
+                    f"{row['speedup']:.2f}\\times \\\\\n"
+                )
+            f.write("\\bottomrule\n\\end{tabular}\n\\end{table}\n")
+
+    print(f"Tables written to {output_tex}")
+
 
 if __name__ == "__main__":
     main()

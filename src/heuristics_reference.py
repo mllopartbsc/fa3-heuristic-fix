@@ -1,16 +1,15 @@
 """
-Reference Python implementations of all heuristic policies discussed in the paper.
+Reference Python implementations of the split-selection policies discussed in
+the reproduction package.
 
-These mirror the C++ logic in flash_attn/hopper/heuristics.h and are used to
-compute the expected num_splits for each (B, H_KV, L_K, D) configuration
-without running the actual kernel.
+These functions mirror the decision logic used in the reproduction package so that
+benchmarking code can reason about:
 
-Policies:
-  - Policy A (baseline):    Upstream FA3 heuristic with premature guard
-  - Policy B (forced):      Unconditional forced splitting (oracle ceiling)
-  - Policy C (tile-aware):  The proposed two-line fix
-  - no_shortcut:            Baseline with the guard entirely removed
-  - relaxed:                Guard relaxed to num_n_blocks <= 2
+  - baseline_upstream:      upstream FA3 heuristic with the premature guard
+  - upstream_two_guard:     the real upstreamable two-guard patch
+  - latest_stack_tuned_s3:  same guards plus an explicit low-tile s=3 choice
+  - no_shortcut:            baseline with the guard entirely removed
+  - relaxed:                guard relaxed to num_n_blocks <= 2
 """
 
 import math
@@ -75,9 +74,9 @@ def baseline_num_splits(
 
 
 # =============================================================================
-#  Policy C: Tile-Aware Fix
+#  Upstream Patch Track: two-guard fall-through patch
 # =============================================================================
-def tile_aware_num_splits(
+def upstream_two_guard_num_splits(
     *,
     b: int,
     hkv: int,
@@ -92,10 +91,11 @@ def tile_aware_num_splits(
     min_tiles_for_shortcut: int = 4,
 ) -> int:
     """
-    The proposed two-line fix:
+    The upstreamable two-guard patch:
       1. if (num_n_blocks <= 3) return 1;          // Guard 1
       2. if (num_n_blocks <= 4 && tiles >= 4) return 1;  // Guard 2
-      3. Fall through to existing efficiency loop.
+      3. if (num_n_blocks == 4 && tiles < 4) return 3;   // Low-tile boundary override
+      4. Fall through to existing efficiency loop.
     """
     num_n_blocks = _ceil_div(lk, block_n)
     num_m_blocks = _ceil_div(lq, block_m)
@@ -111,13 +111,17 @@ def tile_aware_num_splits(
             return min(_ceil_div(size_one_kv_head, size_l2), max_splits)
         return 1
 
-    # Guard 1: L_K <= 384 (nblk <= 3) — combine cost always too high
+    # Guard 1: L_K <= 384 (nblk <= 3)
     if num_n_blocks <= 3:
         return 1
 
-    # Guard 2: L_K = 448-512 (nblk = 4) with enough tiles — splitting not needed
+    # Guard 2: L_K = 448-512 (nblk = 4) with enough tiles
     if num_n_blocks <= 4 and total_mblocks >= min_tiles_for_shortcut:
         return 1
+
+    # Low-tile boundary case: explicit override for L_K=512 when tiles < 4
+    if num_n_blocks == 4 and total_mblocks < min_tiles_for_shortcut:
+        return 3
 
     # Existing efficiency loop (unchanged)
     max_splits = min(max_splits, num_sms, num_n_blocks)
@@ -156,7 +160,7 @@ def latest_stack_tuned_num_splits(
     """
     Tuned variant for the latest software stack.
 
-    The safety logic remains the same as the proposed policy:
+    The safety logic remains the same as the upstream two-guard patch:
       - Guard 1 keeps L_K <= 384 at 1 split.
       - Guard 2 keeps nblk=4 with enough tiles at 1 split.
 
@@ -218,7 +222,7 @@ def no_shortcut_num_splits(
 ) -> int:
     """
     Baseline with the num_n_blocks<=4 shortcut entirely removed.
-    Used in Guard Ablation (Table 8) to show regressions at L_K<=384.
+    Used in guard ablation to expose the cost of removing the shortcut entirely.
     """
     num_n_blocks = _ceil_div(lk, block_n)
     num_m_blocks = _ceil_div(lq, block_m)
@@ -267,7 +271,8 @@ def relaxed_num_splits(
 ) -> int:
     """
     Relaxed fix: guard lowered to num_n_blocks <= 2 (L_K <= 256).
-    Used in Guard Ablation (Table 8) to show it misses the L_K=512 win.
+    Used in guard ablation to show that lowering the threshold misses the
+    low-tile L_K=512 win region.
     """
     num_n_blocks = _ceil_div(lk, block_n)
     num_m_blocks = _ceil_div(lq, block_m)
@@ -298,3 +303,23 @@ def relaxed_num_splits(
         if effs[s - 1] >= 0.85 * max_eff:
             return s
     return 1
+
+
+def candidate_policy_name(track: str) -> str:
+    if track == "upstream_patch":
+        return "upstream_two_guard"
+    if track == "latest_stack_tuned":
+        return "latest_stack_tuned_s3"
+    raise ValueError(f"Unsupported track '{track}'")
+
+
+def candidate_num_splits_for_track(track: str, **kwargs) -> int:
+    if track == "upstream_patch":
+        return upstream_two_guard_num_splits(**kwargs)
+    if track == "latest_stack_tuned":
+        return latest_stack_tuned_num_splits(**kwargs)
+    raise ValueError(f"Unsupported track '{track}'")
+
+
+# Backward-compatible aliases used by older docs / scripts.
+tile_aware_num_splits = upstream_two_guard_num_splits

@@ -1,16 +1,20 @@
---- a/flash_attn/hopper/heuristics.h
-+++ b/flash_attn/hopper/heuristics.h
-@@ -XX,7 +XX,10 @@
-     // ... (preceding code in num_splits_heuristic() unchanged) ...
- 
--    if (num_n_blocks <= 4) {
--        return 1;
--    }
-+    // Guard 1: L_K <= 384 (nblk <= 3) — combine cost always too high
+diff --git a/hopper/heuristics.h b/hopper/heuristics.h
+--- a/hopper/heuristics.h
++++ b/hopper/heuristics.h
+@@ -35,8 +35,12 @@
+             return 1;
+         }
+     }
+-    // If num_n_blocks is too small, use 1 split. For example, we never split for hdim = 128 and seqlen_k = 512.
+-    if (num_n_blocks <= 4) { return 1; }
++    // Guard 1: leave shorter contexts unchanged.
 +    if (num_n_blocks <= 3) { return 1; }
-+
-+    // Guard 2: L_K = 448-512 (nblk = 4) with enough tiles — splitting not needed
-+    // total_mblocks == batch_size * num_heads (already a function parameter)
++    // Guard 2: for nblk = 4, keep 1 split only when there are already enough tiles.
++    // total_mblocks == batch_size * num_heads (already a function parameter).
 +    if (num_n_blocks <= 4 && total_mblocks >= 4) { return 1; }
- 
-     // Fall through: existing efficiency loop runs (unchanged)
++    // Low-tile boundary case: explicit override for L_K=512 when tiles < 4.
++    if (num_n_blocks == 4 && total_mblocks < 4) { return 3; }
++    // For longer contexts, fall through to the existing efficiency loop.
+     max_splits = std::min({max_splits, num_SMs, num_n_blocks});
+     float max_efficiency = 0.f;
+     std::vector<float> efficiency;

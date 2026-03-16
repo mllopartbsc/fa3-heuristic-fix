@@ -1,6 +1,13 @@
-# Technical Details: Tile-Aware Split Heuristic
+# Technical Details: Upstream Two-Guard Patch
 
-This document explains the technical mechanisms behind the proposed FlashAttention-3 patch, why it is necessary, and how it resolves hardware underutilization on NVIDIA Hopper GPUs.
+This document explains the mechanism and exact code change for the
+`upstream_patch` track. The separate latest-stack tuned `s=3` policy is not the
+subject of this document; see [`LATEST_STACK_FINDINGS.md`](LATEST_STACK_FINDINGS.md)
+for that appendix track.
+
+**Build scope:** All FA3 builds in this repo are Hopper-only (SM90). Non-Hopper architectures are not compiled.
+
+**Precomputed scheduler metadata:** The headline speedups (~1.19--1.22x) require precomputed scheduler metadata (`get_scheduler_metadata()`). See [`UPSTREAM_PATCH_EXPECTATIONS.md`](UPSTREAM_PATCH_EXPECTATIONS.md) for details.
 
 ## 1. The Bottleneck: Hardware Underutilization
 
@@ -76,13 +83,16 @@ By returning `1` split unconditionally, it prevented the sophisticated efficienc
 
 ---
 
-## 3. The Solution: Tile-Aware Heuristic Fix
+## 3. The Solution: Two-Guard Upstream Patch
 
-The solution is to force **Sequence Splitting** when the number of tiles is low, even for relatively short sequences ($L \approx 512$). This divides the KV-cache sequence among multiple SMs, increasing the total CTA count to fill the GPU.
+The solution is to remove the unconditional short-sequence shortcut only when
+the workload is both short and low-tile. This preserves the existing FA3 logic
+for shorter and already-saturated cases, while allowing the original
+efficiency loop to run for the `nblk=4`, low-tile boundary regime.
 
 ### The Code Change (High-Level)
 
-The fix replaces a premature exit guard in the heuristic logic with a "tile-aware" check.
+The patch replaces one premature guard with two narrower guards.
 
 #### C++ Logic (Proposed Change)
 ```cpp
@@ -90,16 +100,16 @@ The fix replaces a premature exit guard in the heuristic logic with a "tile-awar
 // OLD: Prematurely return 1 split if sequence is short
 // if (num_n_blocks <= 4) return 1;
 
-// NEW: Only return 1 split if nblk is very short OR we have enough tiles
+// NEW: Only return 1 split if nblk is very short OR we already have enough tiles
 if (num_n_blocks <= 3) return 1; 
 if (num_n_blocks <= 4 && total_mblocks >= 4) return 1;
 
-// Otherwise, fall through to efficiency optimizer...
+// Otherwise, fall through to the existing efficiency optimizer...
 ```
 
 #### Python Reference Implementation
 ```python
-def tile_aware_num_splits(nblk, tiles, num_sms):
+def upstream_two_guard_num_splits(nblk, tiles, num_sms):
     # Guard 1: Extremely short context (L <= 384)
     if nblk <= 3:
         return 1
@@ -109,8 +119,7 @@ def tile_aware_num_splits(nblk, tiles, num_sms):
     if nblk <= 4 and tiles >= 4:
         return 1
 
-    # Win Regime: Force splitting to fill the 132 SMs
-    # (Existing FA3 efficiency loop calculates optimal s)
+    # Win regime: let the existing FA3 efficiency loop choose splits
     return efficiency_loop(nblk, tiles, num_sms)
 ```
 
@@ -118,35 +127,42 @@ def tile_aware_num_splits(nblk, tiles, num_sms):
 
 ## 4. Why It Works
 
-By bypassing the `nblk <= 4` shortcut for low-tile MQA, the kernel now calculates that 3 or 4 splits are optimal. For $H_{KV}=1$, this increases the CTA count from **8** to **32**, significantly improving SM coverage and memory controller pressure, resulting in the measured **~20% kernel-level speedup**.
+By bypassing the `nblk <= 4` shortcut only in the low-tile boundary regime,
+the kernel can recover additional SM parallelism without changing shorter or
+already-saturated cases. For `H_KV=1`, moving away from `s=1` increases the CTA
+count from **8** to **32** in the `nblk=4` case, materially improving SM
+coverage and yielding the reported kernel-level win.
 
 ## 5. Performance Impact
 
-| Config | Regime | Baseline Splitting | Fixed Splitting | Speedup |
+| Config | Regime | Baseline Splitting | Candidate Splitting | Speedup |
 | :--- | :--- | :--- | :--- | :--- |
-| MQA ($H_{KV}=1$), $L=512$ | **Starvation** | 1 | 3 | **1.22x** |
-| GQA ($H_{KV}=2$), $L=512$ | **Starvation** | 1 | 3 | **1.16x** |
+| MQA ($H_{KV}=1$), $L=512$ | **Starvation** | 1 | loop-enabled | reviewer benchmark |
+| GQA ($H_{KV}=2$), $L=512$ | **Starvation** | 1 | loop-enabled | reviewer benchmark |
 | MHA ($H_{KV}=64$), $L=512$ | **Saturated** | 1 | 1 | **1.00x (Safe)** |
 
 ---
 
-## 6. Reproduction Methodology: Why a Python Reference?
+## 6. Reproduction Methodology: Why a Python Reference Still Exists?
 
 A common question is why the package includes a Python implementation (`src/heuristics_reference.py`) if the final goal is a C++ patch.
 
-The reference implementation serves three critical roles in this reproduction package:
+The Python reference still serves three useful roles in this repository:
 
-1.  **A/B Simulation**: The FlashAttention-3 Python API allows passing an explicit `num_splits` value. By using the Python reference, we can calculate what the "Baseline" would have picked ($s=1$) and what the "Fix" picks ($s=3$) and measure them side-by-side using the **same compiled binary**. This ensures the measured speedup is due to the split decision itself, not compiler noise or binary differences.
-2.  **Rapid Ablations**: We can test dozens of alternative thresholds (e.g., `nblk <= 2` or `num_splits=4`) by simply changing a Python variable. This allows us to prove the "Safety Contract" (Experiment 3) and "Sensitivity" (threshold sweep) much faster than recompiling the C++ kernel for every guest variation.
-3.  **Unit Testing**: It allows the `reproduce.py` script to verify that the C++ patch (once applied) matches the intended algorithmic logic across 160+ shapes without needing a debugger.
+1.  **Policy Introspection**: It lets experiments record which split count each policy would choose at a given shape.
+2.  **Rapid Ablations**: It supports ablation and sensitivity studies without recompiling C++ for every alternative threshold.
+3.  **Cross-Checking**: It provides a readable mirror of the intended C++ decision logic.
+
+The benchmark uses policy injection with precomputed scheduler metadata for both
+tracks, so the full improvement (~1.19–1.22×) is visible. See [`METHODOLOGY.md`](METHODOLOGY.md).
 
 ---
 
 ## 7. Heuristic vs. Kernel: Why We Still Compile
 
-A common point of confusion is why compilation is required if a Python reference exists:
+*   **The Heuristic (Python)**: The *decision maker*. It takes the attention shape (B, H, L) and outputs `num_splits`. It does **not** perform GPU computation.
+*   **The Kernel (C++)**: The *execution engine*. The CUDA/TMA code that performs the actual attention computation.
 
-*   **The Heuristic (Python)**: This is only the *decision maker*. It takes the attention shape (B, H, L) and outputs a single integer: `num_splits`. It does **not** perform any actual GPU computation.
-*   **The Kernel (C++)**: This is the *execution engine*. It is the highly-optimized CUDA/TMA code that actually reads the KV-cache from HBM, performs the dot-products on Tensor Cores, and writes the output.
-
-We must compile the FA3 kernels because **performance measurements require the real engine**. The Python reference simply tells the engine "Run in Mode X" or "Run in Mode Y". Without the compiled CUDA binary, there is no performance to measure, and we cannot verify that our C++ patch actually correctly integrates into the FlashAttention-3 source tree.
+We compile the FA3 kernels because performance measurements require the real
+engine. The benchmark injects split decisions from Python and uses precomputed
+scheduler metadata to measure the improvement.

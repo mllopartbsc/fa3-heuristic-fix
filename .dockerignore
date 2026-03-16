@@ -6,7 +6,7 @@ __pycache__/
 build/
 dist/
 
-# Results from previous runs (fresh run generates its own)
+# Scratch results from previous runs (fresh run generates its own)
 results/
 
 # NCU reports (large binary files)

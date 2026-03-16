@@ -1,27 +1,22 @@
 #!/usr/bin/env python3
 """
 U-Curve Sweep
-═════════════════════════
 
-Sweeps split values manually in *eager* mode (no CUDA graphs).
-Eager mode includes python dispatch overhead (~30-55us), measuring the
-true "service latency" (T_service = T_dispatch + T_kernel).
-This reproduces the U-shaped curve that demonstrates why 4 (or 3) splits
-is optimal, as excess splits incur linear dispatch penalties masking kernel gains.
-
-Output: results/u_curve_sweep.json
+Common mechanism experiment shared by both tracks.
 """
 
-import sys
+import argparse
 import os
-import json
+import sys
+
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from src.bench_utils import make_decode_tensors, measure_eager_us
+from src.track_config import add_results_dir_argument, add_track_argument, write_track_json
 
 
-def run(quick: bool = False):
+def run(*, track: str, quick: bool = False, results_dir=None):
     sm_count = torch.cuda.get_device_properties(0).multi_processor_count
     device_name = torch.cuda.get_device_name(0)
 
@@ -33,6 +28,7 @@ def run(quick: bool = False):
     hq = max(H_KV, 64)
 
     print(f"Device: {device_name} ({sm_count} SMs)")
+    print(f"Track: {track} (common experiment)")
     print(f"Eager-mode sweep for B={B}, H_KV={H_KV}, L_K={L_K} (MQA boundary)")
     print("Measuring T_service (includes Python dispatch overhead)\n")
 
@@ -61,21 +57,24 @@ def run(quick: bool = False):
             "service_latency_us": round(lat, 2),
         })
 
-    os.makedirs("results", exist_ok=True)
-    output = {
-        "experiment": "u_curve_sweep",
-        "device": device_name,
-        "config": {"B": B, "H_KV": H_KV, "L_K": L_K},
-        "results": results,
-    }
-    with open("results/u_curve_sweep.json", "w") as f:
-        json.dump(output, f, indent=2)
-    print(f"\nResults saved to results/u_curve_sweep.json")
+    out_path = write_track_json(
+        {
+            "device": device_name,
+            "config": {"B": B, "H_KV": H_KV, "L_K": L_K},
+            "results": results,
+        },
+        experiment="u_curve_sweep",
+        track=track,
+        results_dir=results_dir,
+        benchmark_mode="manual_split_eager_common",
+    )
+    print(f"\nResults saved to {out_path}")
 
 
 if __name__ == "__main__":
-    import argparse
     parser = argparse.ArgumentParser()
+    add_track_argument(parser)
+    add_results_dir_argument(parser)
     parser.add_argument("--quick", action="store_true")
     args = parser.parse_args()
-    run(quick=args.quick)
+    run(track=args.track, quick=args.quick, results_dir=args.results_dir)

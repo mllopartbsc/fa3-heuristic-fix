@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """
-Validate headline claims against expected tolerances.
-
-Reads results/*.json plus expected_results/claims.json and
-produces a claim-by-claim verdict. Called by reproduce.py after all
-experiments have completed.
-
-Usage:
-  python3 src/validate_claims.py
-  python3 src/validate_claims.py --results-dir results/ --claims-file expected_results/claims.json
+Validate track-scoped headline claims against expected tolerances.
 """
 
 import argparse
 import json
 import sys
 from pathlib import Path
+from typing import List, Optional, Tuple
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from src.track_config import (
+    add_track_argument,
+    artifacts_dir_for_track,
+    claims_file_for_track,
+    results_dir_for_track,
+)
 
 
 def _bold(t):
@@ -27,7 +29,7 @@ def _yellow(t):
     return f"\033[33;1m{t}\033[0m" if sys.stdout.isatty() else t
 
 
-def load_result(results_dir: Path, experiment: str) -> dict | None:
+def load_result(results_dir: Path, experiment: str) -> Optional[dict]:
     path = results_dir / f"{experiment}.json"
     if path.exists():
         with open(path) as f:
@@ -51,7 +53,7 @@ def find_pair(results_list: list, filters: dict):
     return None
 
 
-def validate(results_dir: Path, claims_file: Path) -> tuple[list, list, list]:
+def validate(results_dir: Path, claims_file: Path) -> Tuple[List, List, List]:
     """Returns (passed, failed, skipped) lists of (claim_name, message) tuples."""
     passed = []
     failed = []
@@ -221,15 +223,15 @@ def validate(results_dir: Path, claims_file: Path) -> tuple[list, list, list]:
 
 def main():
     parser = argparse.ArgumentParser(description="Validate expected claims against experimental results.")
-    parser.add_argument("--results-dir", default="results/", type=Path)
-    parser.add_argument("--claims-file",
-                        default="expected_results/claims.json", type=Path)
+    add_track_argument(parser)
+    parser.add_argument("--results-dir", default=None, type=Path)
+    parser.add_argument("--claims-file", default=None, type=Path)
     parser.add_argument("--json-out", default=None, type=Path,
                         help="Save validation report as JSON")
     args = parser.parse_args()
 
-    results_dir = Path(args.results_dir)
-    claims_file = Path(args.claims_file)
+    results_dir = args.results_dir or results_dir_for_track(args.track)
+    claims_file = args.claims_file or claims_file_for_track(args.track)
 
     passed, failed, skipped = validate(results_dir, claims_file)
 
@@ -256,24 +258,19 @@ def main():
             print(f"    −  {name}: {msg}")
         print()
 
-    # Save JSON report
-    if args.json_out:
-        report = {
-            "passed": [{"claim": n, "detail": m} for n, m in passed],
-            "failed": [{"claim": n, "detail": m} for n, m in failed],
-            "skipped": [{"claim": n, "detail": m} for n, m in skipped],
-        }
-        args.json_out.parent.mkdir(parents=True, exist_ok=True)
-        with open(args.json_out, "w") as f:
-            json.dump(report, f, indent=2)
-
-    # Save to standard location
-    standard_out = results_dir / "claim_validation.json"
     report = {
+        "track": args.track,
         "passed": [{"claim": n, "detail": m} for n, m in passed],
         "failed": [{"claim": n, "detail": m} for n, m in failed],
         "skipped": [{"claim": n, "detail": m} for n, m in skipped],
     }
+    if args.json_out:
+        args.json_out.parent.mkdir(parents=True, exist_ok=True)
+        with open(args.json_out, "w") as f:
+            json.dump(report, f, indent=2)
+
+    standard_out = artifacts_dir_for_track(args.track) / "claim_validation.json"
+    standard_out.parent.mkdir(parents=True, exist_ok=True)
     with open(standard_out, "w") as f:
         json.dump(report, f, indent=2)
 

@@ -2,29 +2,14 @@
 # ============================================================================
 # Run All Experiments: FlashAttention-3 Heuristic Fix Reproduction
 #
-# Runs all experiments and saves results to
-# the results/ directory.
-# as JSON files.
-#
-# Usage:
-#   bash scripts/run_all.sh                    # Run all experiments
-#   bash scripts/run_all.sh --quick            # Quick mode (fewer iterations, ~5-10 min)
-#   bash scripts/run_all.sh --experiment main_results  # Run one experiment
-#
-# For SLURM clusters:
-#   sbatch scripts/run_all.sh
-#
-# Tip: prefer python3 reproduce.py for a fully automated end-to-end run
-#      (includes build, validation, and LaTeX table generation).
-#
-# Expected runtime on H100 SXM5:
-#   - Quick mode: ~5-10 minutes
-#   - Full mode:  ~45-60 minutes
+# Track-aware execution entry point. Results are written to results/<track>/ and
+# reviewer-visible generated tables are written to artifacts/<track>/.
 # ============================================================================
 
 #SBATCH --job-name=fa3-repro
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
+# ^ Edit partition; add --account and --qos if your cluster requires them
 #SBATCH --time=02:00:00
 #SBATCH --output=results/run_all_%j.log
 #SBATCH --error=results/run_all_%j.err
@@ -33,28 +18,45 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPRO_PYDEPS="$REPO_ROOT/.pydeps"
 cd "$REPO_ROOT"
 
-export PYTHONPATH="$REPRO_PYDEPS${PYTHONPATH:+:$PYTHONPATH}"
-
-# Create results directory
-mkdir -p results
-
-# Parse arguments
 QUICK=false
 SINGLE=""
+TRACK="upstream_patch"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --quick) QUICK=true; shift ;;
+        --track) TRACK="$2"; shift 2 ;;
         --experiment) SINGLE="$2"; shift 2 ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
 
+case "$TRACK" in
+    upstream_patch)
+        PROFILE_ROOT="$REPO_ROOT/.pydeps/upstream_patch"
+        ;;
+    latest_stack_tuned)
+        PROFILE_ROOT="$REPO_ROOT/.pydeps/baseline"
+        ;;
+    *)
+        echo "Unsupported track: $TRACK"
+        exit 1
+        ;;
+esac
+
+RESULTS_DIR="$REPO_ROOT/results/$TRACK"
+ARTIFACT_DIR="$REPO_ROOT/artifacts/$TRACK"
+mkdir -p "$RESULTS_DIR" "$ARTIFACT_DIR"
+
+export PYTHONPATH="$PROFILE_ROOT:$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+
+ROUTE=$([ "$TRACK" = "upstream_patch" ] && echo "Route 2: heuristics.h patch + precomputed metadata (upstream merge)" || echo "Route 1: policy injection + precomputed metadata")
 echo "╔══════════════════════════════════════════════════════════════════╗"
 echo "║  FlashAttention-3 Heuristic Fix — Reproduction Suite            ║"
 echo "╚══════════════════════════════════════════════════════════════════╝"
+echo "Track: $TRACK ($ROUTE)"
+echo "Runtime profile: $PROFILE_ROOT"
 echo
 
 if $QUICK; then
@@ -62,7 +64,6 @@ if $QUICK; then
     echo
 fi
 
-# Print environment info
 python3 -c "
 import torch
 props = torch.cuda.get_device_properties(0)
@@ -73,15 +74,12 @@ try:
     import flash_attn_interface
     print(f'FA3:        {flash_attn_interface.__file__}')
 except ImportError:
-    print('FA3:        NOT FOUND — run scripts/setup_environment.sh or python3 reproduce.py first')
+    print('FA3:        NOT FOUND — run scripts/setup_environment.sh or python3 run_experiments.py first')
     exit(1)
 "
 echo
 
 START_TIME=$(date +%s)
-
-# ── Build the extra args passed to every experiment ─────────────────────────
-# All experiment scripts accept --quick (reduces iterations for a fast sanity check)
 QUICK_FLAG=""
 if $QUICK; then
     QUICK_FLAG="--quick"
@@ -101,48 +99,35 @@ run_experiment() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     local exp_start=$(date +%s)
-    # All experiments receive QUICK_FLAG so they can reduce iterations
-    python3 "$script" $QUICK_FLAG $extra_args 2>&1 | tee "results/${name}.log"
+    python3 "$script" --track "$TRACK" --results-dir "$RESULTS_DIR" $QUICK_FLAG $extra_args \
+        2>&1 | tee "$RESULTS_DIR/${name}.log"
     local exp_end=$(date +%s)
     local elapsed=$((exp_end - exp_start))
-
     echo "  Completed in ${elapsed}s"
     echo
 }
 
-# ── Experiment Execution ───────────────────────────────────────────────────
-# Experiment 1 (Section 4.1)  → exp1_correctness.json
-# Experiment 2 (Section 4.2)  → exp2_profiling.json
-# Table 5 (Main Results)      → main_results.json
-# Table 8 (Guard Ablation)    → guard_ablation.json
-# Table 9 (Boundary Sweep)    → boundary_sweep.json
-# Figure 2b (U-curve)         → u_curve_sweep.json
-# Table 6 (E2E Decode)        → e2e_decode_simulation.json
-# Table 7 (Safety Contract)   → exp3_safety_verification.json
-# Appendix Table 10           → threshold_sensitivity.json
+run_experiment "exp1_correctness"      "experiments/exp1_correctness.py"
+run_experiment "exp2_profiling"        "experiments/exp2_mechanism_profiling.py"
+run_experiment "main_results"          "experiments/main_results.py"
+run_experiment "guard_ablation"        "experiments/guard_ablation.py"
+run_experiment "boundary_sweep"        "experiments/boundary_sweep.py"
+run_experiment "u_curve_sweep"         "experiments/u_curve_sweep.py"
+run_experiment "exp3_safety"           "experiments/exp3_safety_verification.py"
+if [[ "$TRACK" == "latest_stack_tuned" ]]; then
+    run_experiment "threshold_sensitivity" "experiments/threshold_sensitivity.py"
+fi
 
-# Run experiments in order of paper appearance
-run_experiment "exp1_correctness"       "experiments/exp1_correctness.py"
-run_experiment "exp2_profiling"         "experiments/exp2_mechanism_profiling.py"
-run_experiment "main_results"           "experiments/main_results.py"
-run_experiment "guard_ablation"         "experiments/guard_ablation.py"
-run_experiment "boundary_sweep"         "experiments/boundary_sweep.py"
-run_experiment "u_curve"                "experiments/u_curve_sweep.py"
-run_experiment "e2e_simulation"         "experiments/e2e_decode_simulation.py"
-run_experiment "exp3_safety"            "experiments/exp3_safety_verification.py"
-run_experiment "threshold_sensitivity"  "experiments/threshold_sensitivity.py"
-
-# ── Generate LaTeX tables ────────────────────────────────────────────────────
 if [[ -z "$SINGLE" ]]; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  Generating LaTeX tables..."
+    echo "  Generating reviewer tables..."
     python3 scripts/generate_tables.py \
-        --results-dir results/ \
-        --output-tex results/tables.tex 2>&1 | tee results/generate_tables.log
+        --track "$TRACK" \
+        --results-dir "$RESULTS_DIR" \
+        --output-tex "$ARTIFACT_DIR/tables.tex" 2>&1 | tee "$RESULTS_DIR/generate_tables.log"
     echo
 fi
 
-# ── Summary ──────────────────────────────────────────────────────────────────
 END_TIME=$(date +%s)
 TOTAL_ELAPSED=$((END_TIME - START_TIME))
 
@@ -152,13 +137,12 @@ echo "╚═══════════════════════�
 echo
 echo "Total runtime: ${TOTAL_ELAPSED}s ($((TOTAL_ELAPSED / 60))m $((TOTAL_ELAPSED % 60))s)"
 echo
-echo "Results saved to:"
-ls -la results/*.json 2>/dev/null || echo "  (no JSON results found)"
+echo "Results saved to: $RESULTS_DIR"
+ls -la "$RESULTS_DIR"/*.json 2>/dev/null || echo "  (no JSON results found)"
 echo
-echo "LaTeX tables: results/tables.tex"
-echo
+echo "Reviewer artifacts: $ARTIFACT_DIR"
 echo "To validate headline claims:"
-echo "  python3 src/validate_claims.py"
+echo "  python3 src/validate_claims.py --track $TRACK --results-dir $RESULTS_DIR"
 echo
-echo "For full automated reproduction (build + run + validate):"
-echo "  python3 reproduce.py"
+echo "For full automated reproduction:"
+echo "  python3 run_experiments.py --track $TRACK"

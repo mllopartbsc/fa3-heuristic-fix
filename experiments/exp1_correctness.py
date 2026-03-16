@@ -1,31 +1,28 @@
 #!/usr/bin/env python3
 """
 Experiment 1: Strict Correctness & Determinism
-═══════════════════════════════════════════════
 
-Verifies that the tile-aware fix (Policy C) produces numerically equivalent
-outputs to a double-precision (FP64) reference implementation of scaled
-dot-product attention.
+Verifies numerical equivalence for the candidate policy selected by each track.
 
-Protocol:
-  - 1,000 randomized trials across diverse shapes
-  - B ∈ {1, 2, 4}, L ∈ [128, 1024], H_KV ∈ {4, 8, 16}
-  - Max relative error ≤ 1e-3, max absolute error ≤ 1e-3
-  - Also checks determinism under atomic reduction (informational)
-
-Output: results/exp1_correctness.json
+Targeted cases (always run): H_KV ∈ {1, 2} at L_K=512 (the win regime),
+plus (2, 512, 1) and (1, 384, 1). Random trials extend coverage to H_KV ∈ {1, 2, 4, 8, 16}.
 """
 
-import sys
-import os
-import json
-import random
+from __future__ import annotations
+
 import argparse
+import json
 import math
+import os
+import random
+import sys
+
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from src.heuristics_reference import baseline_num_splits, tile_aware_num_splits
+
+from src.heuristics_reference import candidate_num_splits_for_track
+from src.track_config import add_results_dir_argument, add_track_argument, write_track_json
 
 # Import flash_attn_interface
 try:
@@ -50,26 +47,45 @@ def attention_ref_like_fa(q, k, v, *, upcast: bool, reorder_ops: bool):
     return out.to(dtype_og)
 
 
+def _make_trial_cases(track: str, total_trials: int) -> list[tuple[int, int, int]]:
+    targeted = [
+        (1, 512, 1),
+        (1, 512, 2),
+        (2, 512, 1),
+        (1, 384, 1),
+    ]
+    if total_trials <= len(targeted):
+        return targeted[:total_trials]
+    cases = list(targeted)
+    random_trials = total_trials - len(targeted)
+    for _ in range(random_trials):
+        cases.append((
+            random.choice([1, 2, 4]),
+            random.randint(128, 1024),
+            random.choice([1, 2, 4, 8, 16]),
+        ))
+    return cases
+
+
 def run(args):
     device = "cuda"
     sm_count = torch.cuda.get_device_properties(0).multi_processor_count
     print(f"Device: {torch.cuda.get_device_name(0)} ({sm_count} SMs)")
+    print(f"Track: {args.track}")
     print(f"Trials: {args.trials}")
     print()
 
     results = []
     max_diff_global = 0.0
     failures = 0
+    trial_cases = _make_trial_cases(args.track, args.trials)
 
     print(f"{'Trial':<6} {'B':<3} {'L':<5} {'H_KV':<5} {'Splits':<7} "
           f"{'MaxErr':<12} {'MeanErr':<12} {'Status'}")
     print("-" * 75)
 
-    for i in range(args.trials):
-        B = random.choice([1, 2, 4])
-        L = random.randint(128, 1024)
-        H_KV = random.choice([4, 8, 16])
-        H_Q = H_KV * 8  # GQA ratio
+    for i, (B, L, H_KV) in enumerate(trial_cases):
+        H_Q = max(H_KV * 8, 64)
         D = 128
         dtype = torch.bfloat16
 
@@ -79,9 +95,8 @@ def run(args):
         k_cache = torch.randn(B, L, H_KV, D, dtype=dtype, device=device)
         v_cache = torch.randn(B, L, H_KV, D, dtype=dtype, device=device)
 
-        # Compute splits under the fix
-        s_fix = tile_aware_num_splits(
-            b=B, hkv=H_KV, lq=1, lk=L, d=D, num_sms=sm_count
+        s_fix = candidate_num_splits_for_track(
+            args.track, b=B, hkv=H_KV, lq=1, lk=L, d=D, num_sms=sm_count
         )
 
         # Match FA3's decode benchmark path: query attends over an existing KV cache.
@@ -128,7 +143,9 @@ def run(args):
 
         results.append({
             "trial": i, "B": B, "L": L, "H_KV": H_KV,
-            "splits": s_fix, "max_abs": max_err, "mean_abs": mean_err,
+            "splits": s_fix,
+            "case_type": "targeted" if i < 4 else "random",
+            "max_abs": max_err, "mean_abs": mean_err,
             "pt_max_abs": pt_max_err, "pt_mean_abs": pt_mean_err,
             "max_rel": max_rel, "status": status,
         })
@@ -145,44 +162,50 @@ def run(args):
     print("\n=== Determinism Check (informational) ===")
     torch.manual_seed(123)
     q = torch.randn(1, 1, 64, 128, dtype=torch.bfloat16, device=device)
-    k_cache = torch.randn(1, 512, 8, 128, dtype=torch.bfloat16, device=device)
-    v_cache = torch.randn(1, 512, 8, 128, dtype=torch.bfloat16, device=device)
+    k_cache = torch.randn(1, 512, 1, 128, dtype=torch.bfloat16, device=device)
+    v_cache = torch.randn(1, 512, 1, 128, dtype=torch.bfloat16, device=device)
     cache_seqlens = torch.tensor([512], dtype=torch.int32, device=device)
+    s_det = candidate_num_splits_for_track(
+        args.track, b=1, hkv=1, lq=1, lk=512, d=128, num_sms=sm_count
+    )
 
     out1 = flash_attn_interface.flash_attn_with_kvcache(
-        q, k_cache, v_cache, cache_seqlens=cache_seqlens, causal=True, num_splits=4
+        q, k_cache, v_cache, cache_seqlens=cache_seqlens, causal=True, num_splits=s_det
     )
     out2 = flash_attn_interface.flash_attn_with_kvcache(
-        q, k_cache, v_cache, cache_seqlens=cache_seqlens, causal=True, num_splits=4
+        q, k_cache, v_cache, cache_seqlens=cache_seqlens, causal=True, num_splits=s_det
     )
     if isinstance(out1, tuple):
         out1 = out1[0]
     if isinstance(out2, tuple):
         out2 = out2[0]
     bitwise = (out1 - out2).abs().max().item() == 0.0
-    print(f"Bitwise identical (splits=4): {bitwise}")
+    print(f"Bitwise identical (splits={s_det}): {bitwise}")
     print("Note: Bitwise determinism under atomic reduction is best-effort.")
 
-    # Save results
-    os.makedirs("results", exist_ok=True)
-    output = {
-        "experiment": "exp1_correctness",
-        "device": torch.cuda.get_device_name(0),
-        "sm_count": sm_count,
-        "total_trials": args.trials,
-        "failures": failures,
-        "worst_case_abs_error": max_diff_global,
-        "determinism_bitwise": bitwise,
-        "verdict": "PASS" if failures == 0 else "FAIL",
-        "trials": results,
-    }
-    with open("results/exp1_correctness.json", "w") as f:
-        json.dump(output, f, indent=2)
-    print(f"\nResults saved to results/exp1_correctness.json")
+    out_path = write_track_json(
+        {
+            "device": torch.cuda.get_device_name(0),
+            "sm_count": sm_count,
+            "total_trials": args.trials,
+            "failures": failures,
+            "worst_case_abs_error": max_diff_global,
+            "determinism_bitwise": bitwise,
+            "verdict": "PASS" if failures == 0 else "FAIL",
+            "trials": results,
+        },
+        experiment="exp1_correctness",
+        track=args.track,
+        results_dir=args.results_dir,
+        benchmark_mode="explicit_num_splits_correctness",
+    )
+    print(f"\nResults saved to {out_path}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Experiment 1: Correctness")
+    add_track_argument(parser)
+    add_results_dir_argument(parser)
     parser.add_argument("--trials", type=int, default=1000)
     parser.add_argument("--quick", action="store_true",
                         help="Quick mode: alias for --trials 100")
