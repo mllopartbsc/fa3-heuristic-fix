@@ -19,7 +19,7 @@ Shows the full improvement (~1.18–1.25×) when the correct split count is chos
 - **Baseline vs patched**: We compare upstream FA3 (heuristic returns s=1) vs patched FA3 (heuristic returns s=3 for win regime)
 - Each subprocess loads its FA3 via `PYTHONPATH`; the heuristic's output for `num_splits` is used with `get_scheduler_metadata()` (Python reference mirrors the C++ heuristic, since the API may not expose it directly)
 
-The benchmark shows: when the heuristics.h patch is merged and consumers use precomputed metadata, you get ~1.19–1.22× in the win regime. This is the upstream-merge path.
+The benchmark shows: when the heuristics.h patch is merged and consumers use precomputed metadata, you get ~1.20–1.24× in the win regime. This is the upstream-merge path.
 
 ## Build Setup
 

@@ -27,7 +27,7 @@ Or `--kernel-only` / `--e2e-only` to run just one part.
 
 | Track | Route | Win regime speedup |
 |-------|-------|--------------------|
-| upstream_patch | 2 | ~1.19–1.22× |
+| upstream_patch | 2 | ~1.20–1.24× |
 | latest_stack_tuned | 1 | ~1.18–1.25× |
 
 ## Validate Claims
@@ -38,4 +38,4 @@ python3 src/validate_claims.py --track upstream_patch
 
 ## Reviewer Artifacts
 
-`results/published/reviewer_artifacts/` — Committed results for reviewers without H100.
+`results/published/reviewer_artifacts/` — Committed results for reviewers without H100. `upstream_patch/` is the canonical paper/PR evidence bundle.

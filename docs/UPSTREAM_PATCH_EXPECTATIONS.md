@@ -7,7 +7,7 @@
 - **Baseline vs patched** in separate subprocesses
 - Both use precomputed `scheduler_metadata` (get_scheduler_metadata)
 - Patched heuristics.h returns s=3 for win regime (L_K=512, H_KV ∈ {1,2})
-- **Expected speedup**: ~1.19–1.22× in win regime
+- **Expected speedup**: ~1.20–1.24× in win regime
 
 This route shows the heuristics.h patch improves when precomputed metadata is used.
 

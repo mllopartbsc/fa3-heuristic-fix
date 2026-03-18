@@ -1,0 +1,47 @@
+{
+  "device": "NVIDIA H100",
+  "sm_count": 132,
+  "results": [
+    {
+      "config": {
+        "B": 1,
+        "H_KV": 8,
+        "L_K": 128,
+        "desc": "Short KV (underfill case)"
+      },
+      "baseline_splits": 1,
+      "forced_splits": 16,
+      "baseline_ctas": 8,
+      "forced_ctas": 128,
+      "baseline_sm_coverage_pct": 6.06,
+      "forced_sm_coverage_pct": 96.97,
+      "baseline_latency_us": 10.1,
+      "forced_latency_us": 11.77,
+      "speedup": 0.859
+    },
+    {
+      "config": {
+        "B": 1,
+        "H_KV": 8,
+        "L_K": 512,
+        "desc": "Medium KV (target fix region)"
+      },
+      "baseline_splits": 1,
+      "forced_splits": 16,
+      "baseline_ctas": 8,
+      "forced_ctas": 128,
+      "baseline_sm_coverage_pct": 6.06,
+      "forced_sm_coverage_pct": 96.97,
+      "baseline_latency_us": 14.01,
+      "forced_latency_us": 13.68,
+      "speedup": 1.024
+    }
+  ],
+  "experiment": "exp2_profiling",
+  "track": "upstream_patch",
+  "track_display_name": "Upstream Two-Guard Patch",
+  "benchmark_mode": "manual_split_mechanism_common",
+  "baseline_policy": "baseline_upstream",
+  "candidate_policy": "upstream_two_guard",
+  "runtime_profile": "upstream_patch"
+}

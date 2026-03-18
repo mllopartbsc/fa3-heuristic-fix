@@ -2,16 +2,16 @@
   "track": "upstream_patch",
   "headline_claims": {
     "mqa_512_speedup": {
-      "expected_value": ">= 1.15x in win regime (policy injection with precomputed metadata)",
+      "expected_value": ">= 1.15x in win regime (heuristics.h patch with precomputed metadata)",
       "min": 1.15,
       "max": 1.35,
-      "description": "Speedup for H_KV=1, L_K=512. Expect ~1.19-1.22x; see docs/UPSTREAM_PATCH_EXPECTATIONS.md"
+      "description": "Speedup for H_KV=1, L_K=512. Expect ~1.20-1.24x; see docs/UPSTREAM_PATCH_EXPECTATIONS.md"
     },
     "gqa2_512_speedup": {
-      "expected_value": ">= 1.15x in win regime (policy injection with precomputed metadata)",
+      "expected_value": ">= 1.15x in win regime (heuristics.h patch with precomputed metadata)",
       "min": 1.15,
       "max": 1.35,
-      "description": "Speedup for H_KV=2, L_K=512. Expect ~1.19-1.22x; see docs/UPSTREAM_PATCH_EXPECTATIONS.md"
+      "description": "Speedup for H_KV=2, L_K=512. Expect ~1.20-1.24x; see docs/UPSTREAM_PATCH_EXPECTATIONS.md"
     },
     "zero_regressions": {
       "expected_value": 0,

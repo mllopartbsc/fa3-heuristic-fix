@@ -1,0 +1,47 @@
+% Reviewer-facing tables generated from track-scoped results
+% track: upstream_patch
+
+\begin{table}[h]
+\centering
+\caption{Main Results (Upstream Patch)}
+\begin{tabular}{llrrr}
+\toprule
+$L_K$ & $H_{KV}$ & Baseline (\si{\us}) & Candidate (\si{\us}) & Speedup \\
+\midrule
+128 & 1 & 9.56 & 9.56 & 1.00\times \\
+128 & 2 & 9.45 & 9.45 & 1.00\times \\
+128 & 8 & 9.46 & 9.46 & 1.00\times \\
+256 & 1 & 11.57 & 11.57 & 1.00\times \\
+256 & 2 & 11.58 & 11.58 & 1.00\times \\
+256 & 8 & 11.60 & 11.60 & 1.00\times \\
+384 & 1 & 13.60 & 13.60 & 1.00\times \\
+384 & 2 & 13.57 & 13.57 & 1.00\times \\
+384 & 8 & 13.55 & 13.55 & 1.00\times \\
+512 & 1 & 13.72 & 11.37 & 1.21\times* \\
+512 & 2 & 13.52 & 10.93 & 1.24\times* \\
+512 & 8 & 13.56 & 13.56 & 1.00\times \\
+2048 & 1 & 11.99 & 11.99 & 1.00\times \\
+2048 & 2 & 12.66 & 12.66 & 1.00\times \\
+2048 & 8 & 12.73 & 12.73 & 1.00\times \\
+4096 & 1 & 13.88 & 13.88 & 1.00\times \\
+4096 & 2 & 13.53 & 13.53 & 1.00\times \\
+4096 & 8 & 15.05 & 15.05 & 1.00\times \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Boundary Sweep Summary}
+\begin{tabular}{rrrrr}
+\toprule
+$L_K$ & nBlk & Baseline (\si{\us}) & Candidate (\si{\us}) & Speedup \\
+\midrule
+256 & 2 & 11.60 & 11.60 & 1.00\times \\
+384 & 3 & 13.71 & 13.71 & 1.00\times \\
+512 & 4 & 13.56 & 11.33 & 1.20\times \\
+640 & 5 & 11.27 & 11.27 & 1.00\times \\
+768 & 6 & 11.34 & 11.34 & 1.00\times \\
+\bottomrule
+\end{tabular}
+\end{table}

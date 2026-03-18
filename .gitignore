@@ -34,6 +34,8 @@ results/**
 !results/README.md
 # Allow committed published results
 !results/published/
+!results/published/README.md
+!results/published/**/
 !results/published/**/*.json
 !results/published/**/*.tex
 

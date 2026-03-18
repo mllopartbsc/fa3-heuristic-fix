@@ -154,7 +154,8 @@ The Python reference still serves three useful roles in this repository:
 3.  **Cross-Checking**: It provides a readable mirror of the intended C++ decision logic.
 
 The benchmark uses policy injection with precomputed scheduler metadata for both
-tracks, so the full improvement (~1.19–1.22×) is visible. See [`METHODOLOGY.md`](METHODOLOGY.md).
+tracks, so the full improvement (~1.20–1.24× for `upstream_patch`) is visible.
+See [`METHODOLOGY.md`](METHODOLOGY.md).
 
 ---
 

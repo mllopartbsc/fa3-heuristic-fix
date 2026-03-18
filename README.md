@@ -12,7 +12,7 @@ This repository provides a **reproduction package** for the FlashAttention-3 seq
 ## Quick Start
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/mllopartbsc/fa3-heuristic-fix.git
 cd fa3-heuristic-fix
 
 # Full reproduction (setup + all experiments)
@@ -52,15 +52,23 @@ python3 run_experiments.py --track all --quick
 | Route | Track | Description | Expected speedup |
 |-------|-------|-------------|------------------|
 | **Route 1** | `latest_stack_tuned` | Policy injection + precomputed metadata (same binary) | ~1.18–1.25× |
-| **Route 2** | `upstream_patch` | heuristics.h patch only (the upstream merge path) | ~1.19–1.22× |
+| **Route 2** | `upstream_patch` | heuristics.h patch only (the upstream merge path) | ~1.20–1.24× |
 
-Route 2 is what FA3 maintainers would merge: only the `heuristics.h` change. Precomputed metadata enabled.
+Route 2 is what FA3 maintainers would merge: only the `heuristics.h` change. Precomputed metadata enabled. It is the canonical evidence track for the paper and FA3 pull request.
 
 ## Output Layout
 
 - `results/<track>/` — JSON results
 - `artifacts/<track>/` — Generated tables, validation reports
-- `results/published/` — Committed results for reviewers without H100
+- `results/published/reviewer_artifacts/` — Committed reviewer artifacts; `upstream_patch/` is the paper/PR evidence bundle
+
+## Refresh Reviewer Artifacts
+
+After regenerating canonical results, refresh the committed reviewer bundle with:
+
+```bash
+python3 scripts/sync_published_artifacts.py --track upstream_patch
+```
 
 ## Running on HPC (Slurm)
 
@@ -98,6 +106,7 @@ scripts/
   prepare_flash_attention.sh # Clone FA3 (for HPC without GitHub on compute nodes)
   submit_slurm.sh            # Slurm job script (edit account/qos for your cluster)
   run_hpc_job.sh             # One-command prepare + submit
+  sync_published_artifacts.py # Refresh committed reviewer bundles from canonical outputs
   run_full_benchmark_suite.sh # Kernel + E2E jobs (see docs/BENCHMARKING.md)
   run_all.sh                 # Alternative: direct sbatch (no container)
 experiments/                 # Individual experiment scripts

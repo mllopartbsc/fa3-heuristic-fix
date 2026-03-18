@@ -1,0 +1,19 @@
+{
+  "device": "NVIDIA H100",
+  "single_layer_delta_us": 3.09,
+  "total_delta_ms": 0.247,
+  "estimated_tpot_baseline_ms": 28.04,
+  "estimated_tpot_fix_ms": 27.793,
+  "estimated_e2e_speedup": 1.0089,
+  "notes": [
+    "This is a serving estimate derived from the measured single-layer kernel delta.",
+    "It is not a measured end-to-end vLLM benchmark."
+  ],
+  "experiment": "e2e_decode_simulation",
+  "track": "upstream_patch",
+  "track_display_name": "Upstream Two-Guard Patch",
+  "benchmark_mode": "patched_binary_with_metadata",
+  "baseline_policy": "baseline_upstream",
+  "candidate_policy": "upstream_two_guard",
+  "runtime_profile": "upstream_patch"
+}

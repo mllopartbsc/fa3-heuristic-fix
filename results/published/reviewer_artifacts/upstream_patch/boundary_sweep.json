@@ -1,0 +1,73 @@
+{
+  "device": "NVIDIA H100",
+  "sm_count": 132,
+  "results": [
+    {
+      "L_K": 256,
+      "H_KV": 1,
+      "B": 1,
+      "nblk": 2,
+      "splits_base": 1,
+      "splits_fix": 1,
+      "baseline_us": 11.6,
+      "fix_us": 11.6,
+      "speedup": 1.0,
+      "result": "UNCHANGED"
+    },
+    {
+      "L_K": 384,
+      "H_KV": 1,
+      "B": 1,
+      "nblk": 3,
+      "splits_base": 1,
+      "splits_fix": 1,
+      "baseline_us": 13.71,
+      "fix_us": 13.71,
+      "speedup": 1.0,
+      "result": "UNCHANGED"
+    },
+    {
+      "L_K": 512,
+      "H_KV": 1,
+      "B": 1,
+      "nblk": 4,
+      "splits_base": 1,
+      "splits_fix": 3,
+      "baseline_us": 13.56,
+      "fix_us": 11.33,
+      "speedup": 1.1974,
+      "result": "WIN"
+    },
+    {
+      "L_K": 640,
+      "H_KV": 1,
+      "B": 1,
+      "nblk": 5,
+      "splits_base": 5,
+      "splits_fix": 5,
+      "baseline_us": 11.27,
+      "fix_us": 11.27,
+      "speedup": 1.0,
+      "result": "UNCHANGED"
+    },
+    {
+      "L_K": 768,
+      "H_KV": 1,
+      "B": 1,
+      "nblk": 6,
+      "splits_base": 6,
+      "splits_fix": 6,
+      "baseline_us": 11.34,
+      "fix_us": 11.34,
+      "speedup": 1.0,
+      "result": "UNCHANGED"
+    }
+  ],
+  "experiment": "boundary_sweep",
+  "track": "upstream_patch",
+  "track_display_name": "Upstream Two-Guard Patch",
+  "benchmark_mode": "patched_binary_with_metadata",
+  "baseline_policy": "baseline_upstream",
+  "candidate_policy": "upstream_two_guard",
+  "runtime_profile": "upstream_patch"
+}

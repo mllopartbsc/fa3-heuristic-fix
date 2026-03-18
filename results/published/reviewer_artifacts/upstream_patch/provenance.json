@@ -1,0 +1,8 @@
+{
+  "track": "upstream_patch",
+  "flash_attention_commit": "fbf24f67",
+  "patch_artifact": "patch/heuristics.patch",
+  "runtime_profile": ".pydeps/upstream_patch",
+  "baseline_profile": ".pydeps/baseline",
+  "benchmark_mode": "patched_binary_with_metadata"
+}

@@ -1,0 +1,65 @@
+{
+  "device": "NVIDIA H100",
+  "sm_count": 132,
+  "results": [
+    {
+      "L_K": 384,
+      "H_KV": 1,
+      "B": 1,
+      "desc": "Short boundary (Guard 1)",
+      "base": {
+        "splits": 1,
+        "latency_us": 13.58,
+        "speedup_vs_base": 1.0
+      },
+      "no_shortcut": {
+        "splits": 3,
+        "latency_us": 11.19,
+        "speedup_vs_base": 1.2133
+      },
+      "relaxed": {
+        "splits": 3,
+        "latency_us": 11.19,
+        "speedup_vs_base": 1.2133
+      },
+      "candidate": {
+        "splits": 1,
+        "latency_us": 13.58,
+        "speedup_vs_base": 1.0
+      }
+    },
+    {
+      "L_K": 512,
+      "H_KV": 1,
+      "B": 1,
+      "desc": "Low-tile boundary (nblk=4)",
+      "base": {
+        "splits": 1,
+        "latency_us": 13.55,
+        "speedup_vs_base": 1.0
+      },
+      "no_shortcut": {
+        "splits": 4,
+        "latency_us": 11.31,
+        "speedup_vs_base": 1.1975
+      },
+      "relaxed": {
+        "splits": 4,
+        "latency_us": 11.31,
+        "speedup_vs_base": 1.1975
+      },
+      "candidate": {
+        "splits": 3,
+        "latency_us": 11.31,
+        "speedup_vs_base": 1.198
+      }
+    }
+  ],
+  "experiment": "guard_ablation",
+  "track": "upstream_patch",
+  "track_display_name": "Upstream Two-Guard Patch",
+  "benchmark_mode": "policy_injected_ablation",
+  "baseline_policy": "baseline_upstream",
+  "candidate_policy": "upstream_two_guard",
+  "runtime_profile": "upstream_patch"
+}

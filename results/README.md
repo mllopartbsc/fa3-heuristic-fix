@@ -4,6 +4,8 @@ Benchmark outputs. By default gitignored (scratch space).
 
 **Published artifacts** for reviewers without H100: [`results/published/reviewer_artifacts/`](published/reviewer_artifacts/).
 
+`published/reviewer_artifacts/upstream_patch/` is the canonical bundle for the paper and FA3 pull request.
+
 ## Run Full Benchmark
 
 1. Run `bash scripts/prepare_flash_attention.sh` once (on login node).
@@ -27,10 +29,6 @@ results/
 ## Publish Results
 
 ```bash
-cp results/upstream_patch/*.json results/published/reviewer_artifacts/upstream_patch/
-cp results/latest_stack_tuned/*.json results/published/reviewer_artifacts/latest_stack_tuned/
-cp artifacts/upstream_patch/*.json artifacts/upstream_patch/*.tex results/published/reviewer_artifacts/upstream_patch/
-cp artifacts/latest_stack_tuned/*.json artifacts/latest_stack_tuned/*.tex results/published/reviewer_artifacts/latest_stack_tuned/
-git add -f results/published/
-git commit -m "Add benchmark results"
+python3 scripts/sync_published_artifacts.py --track upstream_patch
+# Or: python3 scripts/sync_published_artifacts.py --track all
 ```

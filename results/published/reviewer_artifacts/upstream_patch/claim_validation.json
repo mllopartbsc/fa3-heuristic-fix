@@ -1,0 +1,35 @@
+{
+  "track": "upstream_patch",
+  "passed": [
+    {
+      "claim": "mqa_512_speedup",
+      "detail": "1.207x \u2208 [1.15, 1.35]"
+    },
+    {
+      "claim": "gqa2_512_speedup",
+      "detail": "1.237x \u2208 [1.15, 1.35]"
+    },
+    {
+      "claim": "zero_regressions",
+      "detail": "0 regressions \u2713 \u2014 3 wins, 157 unchanged"
+    },
+    {
+      "claim": "correctness_verdict",
+      "detail": "PASS (100 trials, 0 failures)"
+    },
+    {
+      "claim": "correctness_max_abs_error",
+      "detail": "3.91e-03 \u2264 5e-03"
+    },
+    {
+      "claim": "safe_regime_neutral_mqa_384",
+      "detail": "speedup=1.000x \u2208 [0.98,1.02] \u2014 neutral \u2713"
+    },
+    {
+      "claim": "safe_regime_neutral_gqa8_512",
+      "detail": "speedup=1.000x \u2208 [0.98,1.02] \u2014 neutral \u2713"
+    }
+  ],
+  "failed": [],
+  "skipped": []
+}

@@ -116,10 +116,10 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 for TRACK in upstream_patch latest_stack_tuned; do
     if [[ -f "results/\$TRACK/main_results.json" ]]; then
         mkdir -p "artifacts/\$TRACK"
-        python3 scripts/benchmark_ci_report.py --track "\$TRACK" --output "artifacts/\$TRACK/ci_benchmark_report.json" 2>/dev/null || true
+        python3 scripts/benchmark_ci_report.py --track "\$TRACK" --output "artifacts/\$TRACK/ci_benchmark_report.json"
     fi
 done
-python3 -m pytest tests/test_dispatch_rule.py -v 2>/dev/null || true
+python3 -m pytest tests/test_dispatch_rule.py -v
 echo
 
 echo "╔══════════════════════════════════════════════════════════════════╗"

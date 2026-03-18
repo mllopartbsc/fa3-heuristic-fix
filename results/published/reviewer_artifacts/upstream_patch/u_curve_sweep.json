@@ -1,0 +1,273 @@
+{
+  "device": "NVIDIA H100",
+  "config": {
+    "B": 1,
+    "H_KV": 1,
+    "L_K": 512
+  },
+  "results": [
+    {
+      "splits": 1,
+      "service_latency_us": 13.59
+    },
+    {
+      "splits": 2,
+      "service_latency_us": 13.22
+    },
+    {
+      "splits": 3,
+      "service_latency_us": 11.36
+    },
+    {
+      "splits": 4,
+      "service_latency_us": 11.38
+    },
+    {
+      "splits": 5,
+      "service_latency_us": 11.24
+    },
+    {
+      "splits": 6,
+      "service_latency_us": 11.27
+    },
+    {
+      "splits": 7,
+      "service_latency_us": 11.41
+    },
+    {
+      "splits": 8,
+      "service_latency_us": 11.3
+    },
+    {
+      "splits": 9,
+      "service_latency_us": 11.28
+    },
+    {
+      "splits": 10,
+      "service_latency_us": 11.37
+    },
+    {
+      "splits": 11,
+      "service_latency_us": 11.35
+    },
+    {
+      "splits": 12,
+      "service_latency_us": 11.3
+    },
+    {
+      "splits": 13,
+      "service_latency_us": 11.36
+    },
+    {
+      "splits": 14,
+      "service_latency_us": 11.31
+    },
+    {
+      "splits": 15,
+      "service_latency_us": 11.42
+    },
+    {
+      "splits": 16,
+      "service_latency_us": 11.46
+    },
+    {
+      "splits": 17,
+      "service_latency_us": 11.46
+    },
+    {
+      "splits": 18,
+      "service_latency_us": 11.39
+    },
+    {
+      "splits": 19,
+      "service_latency_us": 11.42
+    },
+    {
+      "splits": 20,
+      "service_latency_us": 11.44
+    },
+    {
+      "splits": 21,
+      "service_latency_us": 11.43
+    },
+    {
+      "splits": 22,
+      "service_latency_us": 11.4
+    },
+    {
+      "splits": 23,
+      "service_latency_us": 11.47
+    },
+    {
+      "splits": 24,
+      "service_latency_us": 11.48
+    },
+    {
+      "splits": 25,
+      "service_latency_us": 11.37
+    },
+    {
+      "splits": 26,
+      "service_latency_us": 11.34
+    },
+    {
+      "splits": 27,
+      "service_latency_us": 11.52
+    },
+    {
+      "splits": 28,
+      "service_latency_us": 11.43
+    },
+    {
+      "splits": 29,
+      "service_latency_us": 11.54
+    },
+    {
+      "splits": 30,
+      "service_latency_us": 11.51
+    },
+    {
+      "splits": 31,
+      "service_latency_us": 11.39
+    },
+    {
+      "splits": 32,
+      "service_latency_us": 11.36
+    },
+    {
+      "splits": 33,
+      "service_latency_us": 11.41
+    },
+    {
+      "splits": 34,
+      "service_latency_us": 11.29
+    },
+    {
+      "splits": 35,
+      "service_latency_us": 11.4
+    },
+    {
+      "splits": 36,
+      "service_latency_us": 11.36
+    },
+    {
+      "splits": 37,
+      "service_latency_us": 11.34
+    },
+    {
+      "splits": 38,
+      "service_latency_us": 11.35
+    },
+    {
+      "splits": 39,
+      "service_latency_us": 11.32
+    },
+    {
+      "splits": 40,
+      "service_latency_us": 11.24
+    },
+    {
+      "splits": 41,
+      "service_latency_us": 11.31
+    },
+    {
+      "splits": 42,
+      "service_latency_us": 11.36
+    },
+    {
+      "splits": 43,
+      "service_latency_us": 11.31
+    },
+    {
+      "splits": 44,
+      "service_latency_us": 11.26
+    },
+    {
+      "splits": 45,
+      "service_latency_us": 11.39
+    },
+    {
+      "splits": 46,
+      "service_latency_us": 11.27
+    },
+    {
+      "splits": 47,
+      "service_latency_us": 11.3
+    },
+    {
+      "splits": 48,
+      "service_latency_us": 11.35
+    },
+    {
+      "splits": 49,
+      "service_latency_us": 11.33
+    },
+    {
+      "splits": 50,
+      "service_latency_us": 11.29
+    },
+    {
+      "splits": 51,
+      "service_latency_us": 11.31
+    },
+    {
+      "splits": 52,
+      "service_latency_us": 11.37
+    },
+    {
+      "splits": 53,
+      "service_latency_us": 11.23
+    },
+    {
+      "splits": 54,
+      "service_latency_us": 11.19
+    },
+    {
+      "splits": 55,
+      "service_latency_us": 11.34
+    },
+    {
+      "splits": 56,
+      "service_latency_us": 11.16
+    },
+    {
+      "splits": 57,
+      "service_latency_us": 11.35
+    },
+    {
+      "splits": 58,
+      "service_latency_us": 11.22
+    },
+    {
+      "splits": 59,
+      "service_latency_us": 11.18
+    },
+    {
+      "splits": 60,
+      "service_latency_us": 11.16
+    },
+    {
+      "splits": 61,
+      "service_latency_us": 11.19
+    },
+    {
+      "splits": 62,
+      "service_latency_us": 11.15
+    },
+    {
+      "splits": 63,
+      "service_latency_us": 11.23
+    },
+    {
+      "splits": 64,
+      "service_latency_us": 11.14
+    }
+  ],
+  "experiment": "u_curve_sweep",
+  "track": "upstream_patch",
+  "track_display_name": "Upstream Two-Guard Patch",
+  "benchmark_mode": "manual_split_kernel_metadata",
+  "baseline_policy": "baseline_upstream",
+  "candidate_policy": "upstream_two_guard",
+  "runtime_profile": "upstream_patch"
+}
